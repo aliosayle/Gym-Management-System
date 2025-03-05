@@ -41,10 +41,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['client_name']) && $pe
     echo "<script>alert('You do not have permission to add clients.');</script>";
 }
 
+
+include 'layouts/api_keys.php';
+
 // Function to send WhatsApp message
 function sendWhatsAppMessage($phoneNumber, $messageBody) {
-    $apiUrl = 'http://www.00243.net:3001/api/v1/messages';
-    $authToken = 'u4xKAyGrv8LUaPzR.zSRIH21JkxCr0IZ4Pk1wPQbVDSqHRl03';
 
     $curl = curl_init();
 

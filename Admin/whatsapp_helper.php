@@ -1,8 +1,9 @@
 <?php
+
+include 'layouts/api_keys.php';
+
 function sendWhatsAppMessage($phoneNumber, $messageBody) {
-    // Define the WhatsApp API endpoint and authorization token
-    $apiUrl = 'http://www.00243.net:3001/api/v1/messages';
-    $authToken = 'u4xKAyGrv8LUaPzR.zSRIH21JkxCr0IZ4Pk1wPQbVDSqHRl03';
+
 
     // Initialize cURL
     $curl = curl_init();
