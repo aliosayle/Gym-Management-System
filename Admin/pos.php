@@ -89,6 +89,9 @@ $products = $stmt->fetchAll(PDO::FETCH_ASSOC);
                                         <button type="submit" class="btn btn-primary">Add to Cart</button>
                                     </form>
 
+                                    <!-- Hidden input field for barcode scanning -->
+                                    <input type="text" id="barcode-input" style="position: absolute; left: -9999px;">
+
                                     <h4 class="mt-4">Cart</h4>
                                     <table class="table table-bordered">
                                         <thead>
@@ -135,144 +138,147 @@ $products = $stmt->fetchAll(PDO::FETCH_ASSOC);
     <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
     <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
     <script>
-$(document).ready(function() {
-    // Initialize Select2
-    $('#product_id').select2({
-        placeholder: 'Select a product',
-        allowClear: true
-    }).on('select2:open', function() {
-        // Focus on the search input field inside Select2 dropdown
-        setTimeout(function() {
-            $('.select2-search__field').focus();
-        }, 200); // Increase timeout to make sure the input is fully rendered
-    });
+    $(document).ready(function() {
+        $('#product_id').select2({
+            placeholder: 'Select a product',
+            allowClear: true
+        }).on('select2:open', function() {
+            // Focus on the search input field inside Select2 dropdown
+            setTimeout(function() {
+                $('.select2-search__field').focus();
+            }, 100);
+        });
 
-    // Add product to cart on Enter key press
-    $('.select2-search__field').on('keypress', function(e) {
-        if (e.which === 13) { // 13 is the Enter key
-            $('#add-to-cart-form').submit();
-        }
-    });
+        var cart = [];
 
-    var cart = [];
+        $('#add-to-cart-form').on('submit', function(e) {
+            e.preventDefault();
+            addItemToCart($('#product_id').val());
+        });
 
-    // Handle the Add to Cart form submission
-    $('#add-to-cart-form').on('submit', function(e) {
-        e.preventDefault();
-        var productId = $('#product_id').val();
-        var productName = $('#product_id option:selected').text().split(' - $')[0];
-        var productPrice = parseFloat($('#product_id option:selected').text().split(' - $')[1]);
-
-        var existingItem = cart.find(item => item.product_id == productId);
-        if (existingItem) {
-            existingItem.quantity += 1;
-        } else {
-            cart.push({
-                product_id: productId,
-                name: productName,
-                price: productPrice,
-                quantity: 1
-            });
-        }
-
-        updateCart();
-        focusSelect2();
-    });
-
-    // Remove item from cart
-    $('#cart-items').on('click', '.remove-item', function() {
-        var productId = $(this).data('product-id');
-        cart = cart.filter(item => item.product_id != productId);
-        updateCart();
-        focusSelect2();
-    });
-
-    // Handle quantity change in cart
-    $('#cart-items').on('input', '.quantity-input', function() {
-        var productId = $(this).data('product-id');
-        var quantity = parseInt($(this).val());
-        var item = cart.find(item => item.product_id == productId);
-        if (item) {
-            item.quantity = quantity;
+        $('#cart-items').on('click', '.remove-item', function() {
+            var productId = $(this).data('product-id');
+            cart = cart.filter(item => item.product_id != productId);
             updateCart();
-            focusSelect2();
-        }
-    });
+        });
 
-    // Clear cart button
-    $('#clear-cart').on('click', function() {
-        cart = [];
-        updateCart();
-        focusSelect2();
-    });
-
-    // Complete Sale form
-    $('#complete-sale-form').on('submit', function(e) {
-        e.preventDefault();
-        $('#loading-overlay').show();
-        $.ajax({
-            type: 'POST',
-            url: 'complete_sale.php',
-            data: {
-                action: 'complete_sale',
-                cart: JSON.stringify(cart)
-            },
-            dataType: 'json',
-            success: function(response) {
-                $('#loading-overlay').hide();
-                if (response.status === 'success') {
-                    alert(response.message);
-                    cart = [];
-                    updateCart();
-                } else {
-                    alert(response.message);
-                }
-                focusSelect2();
-            },
-            error: function() {
-                $('#loading-overlay').hide();
-                alert('An error occurred while completing the sale.');
-                focusSelect2();
+        $('#cart-items').on('input', '.quantity-input', function() {
+            var productId = $(this).data('product-id');
+            var quantity = parseInt($(this).val());
+            var item = cart.find(item => item.product_id == productId);
+            if (item) {
+                item.quantity = quantity;
+                updateCart();
             }
         });
-    });
 
-    // Update the cart UI
-    function updateCart() {
-        var cartItems = $('#cart-items');
-        cartItems.empty();
-        if (cart.length > 0) {
-            cart.forEach(function(item) {
-                cartItems.append(
-                    '<tr>' +
-                    '<td>' + item.name + '</td>' +
-                    '<td>' + item.price + '</td>' +
-                    '<td><input type="number" class="form-control quantity-input" data-product-id="' +
-                    item.product_id + '" value="' + item.quantity + '" min="1"></td>' +
-                    '<td>' + (item.price * item.quantity).toFixed(2) + '</td>' +
-                    '<td><button class="btn btn-danger btn-sm remove-item" data-product-id="' +
-                    item.product_id + '">Remove</button></td>' +
-                    '</tr>'
-                );
+        $('#clear-cart').on('click', function() {
+            cart = [];
+            updateCart();
+        });
+
+        $('#complete-sale-form').on('submit', function(e) {
+            e.preventDefault();
+            $('#loading-overlay').show();
+            $.ajax({
+                type: 'POST',
+                url: 'complete_sale.php',
+                data: {
+                    action: 'complete_sale',
+                    cart: JSON.stringify(cart)
+                },
+                dataType: 'json',
+                success: function(response) {
+                    $('#loading-overlay').hide();
+                    if (response.status === 'success') {
+                        alert(response.message);
+                        cart = [];
+                        updateCart();
+                    } else {
+                        alert(response.message);
+                    }
+                },
+                error: function() {
+                    $('#loading-overlay').hide();
+                    alert('An error occurred while completing the sale.');
+                }
             });
-            $('#clear-cart').show();
-            $('#complete-sale-form').show();
-        } else {
-            cartItems.append('<tr><td colspan="5">No items in cart</td></tr>');
-            $('#clear-cart').hide();
-            $('#complete-sale-form').hide();
+        });
+
+        function addItemToCart(productId) {
+            var productName = $('#product_id option[value="' + productId + '"]').text().split(' - $')[0];
+            var productPrice = parseFloat($('#product_id option[value="' + productId + '"]').text().split(' - $')[1]);
+
+            var existingItem = cart.find(item => item.product_id == productId);
+            if (existingItem) {
+                existingItem.quantity += 1;
+            } else {
+                cart.push({
+                    product_id: productId,
+                    name: productName,
+                    price: productPrice,
+                    quantity: 1
+                });
+            }
+
+            updateCart();
         }
-    }
 
-    // Function to open Select2 and focus on the input
-    function focusSelect2() {
-        $('#product_id').select2('open');
-    }
+        function updateCart() {
+            var cartItems = $('#cart-items');
+            cartItems.empty();
+            if (cart.length > 0) {
+                cart.forEach(function(item) {
+                    cartItems.append(
+                        '<tr>' +
+                        '<td>' + item.name + '</td>' +
+                        '<td>' + item.price + '</td>' +
+                        '<td><input type="number" class="form-control quantity-input" data-product-id="' +
+                        item.product_id + '" value="' + item.quantity + '" min="1"></td>' +
+                        '<td>' + (item.price * item.quantity).toFixed(2) + '</td>' +
+                        '<td><button class="btn btn-danger btn-sm remove-item" data-product-id="' +
+                        item.product_id + '">Remove</button></td>' +
+                        '</tr>'
+                    );
+                });
+                $('#clear-cart').show();
+                $('#complete-sale-form').show();
+            } else {
+                cartItems.append('<tr><td colspan="5">No items in cart</td></tr>');
+                $('#clear-cart').hide();
+                $('#complete-sale-form').hide();
+            }
+        }
 
-    // Initial focus on Select2 input field
-    focusSelect2();
-});
+        // Listen for barcode input
+        $('#barcode-input').on('input', function() {
+            var barcode = $(this).val();
+            var productId = getProductIdByBarcode(barcode);
+            if (productId) {
+                addItemToCart(productId);
+                $(this).val(''); // Clear the input field
+            }
+        });
 
+        function getProductIdByBarcode(barcode) {
+            // Implement this function to return the product ID based on the barcode
+            // For example, you can map barcodes to product IDs in a JavaScript object
+            var barcodeMap = {};
+            <?php
+            $barcodeQuery = "SELECT product_id, name FROM products";
+            $barcodeStmt = $pdo->prepare($barcodeQuery);
+            $barcodeStmt->execute();
+            $barcodeProducts = $barcodeStmt->fetchAll(PDO::FETCH_ASSOC);
+            foreach ($barcodeProducts as $barcodeProduct) {
+                echo "barcodeMap['" . htmlspecialchars($barcodeProduct['name']) . "'] = '" . htmlspecialchars($barcodeProduct['product_id']) . "';\n";
+            }
+            ?>
+            return barcodeMap[barcode];
+        }
+
+        // Automatically focus on the hidden barcode input field
+        $('#barcode-input').focus();
+    });
     </script>
 </body>
 
