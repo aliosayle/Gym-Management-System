@@ -36,6 +36,25 @@ $products = $stmt->fetchAll(PDO::FETCH_ASSOC);
     <?php include 'layouts/head.php'; ?>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha3/dist/css/bootstrap.min.css" rel="stylesheet">
     <?php include 'layouts/head-style.php'; ?>
+    <style>
+        #loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(255, 255, 255, 0.8);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+        }
+
+        #loading-overlay img {
+            width: 100px;
+            height: 100px;
+        }
+    </style>
 </head>
 
 <body>
@@ -103,6 +122,10 @@ $products = $stmt->fetchAll(PDO::FETCH_ASSOC);
         </div>
     </div>
 
+    <div id="loading-overlay">
+        <img src="assets/images/loading.gif" alt="Loading...">
+    </div>
+
     <?php include 'layouts/footer.php'; ?>
     </div>
 
@@ -112,112 +135,144 @@ $products = $stmt->fetchAll(PDO::FETCH_ASSOC);
     <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
     <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
     <script>
-    $(document).ready(function() {
-        $('#product_id').select2({
-            placeholder: 'Select a product',
-            allowClear: true
-        }).on('select2:open', function() {
-            // Focus on the search input field inside Select2 dropdown
-            setTimeout(function() {
-                $('.select2-search__field').focus();
-            }, 100);
-        });
+$(document).ready(function() {
+    // Initialize Select2
+    $('#product_id').select2({
+        placeholder: 'Select a product',
+        allowClear: true
+    }).on('select2:open', function() {
+        // Focus on the search input field inside Select2 dropdown
+        setTimeout(function() {
+            $('.select2-search__field').focus();
+        }, 200); // Increase timeout to make sure the input is fully rendered
     });
-    </script>
-    <script>
-    $(document).ready(function() {
-        var cart = [];
 
-        $('#add-to-cart-form').on('submit', function(e) {
-            e.preventDefault();
-            var productId = $('#product_id').val();
-            var productName = $('#product_id option:selected').text().split(' - $')[0];
-            var productPrice = parseFloat($('#product_id option:selected').text().split(' - $')[1]);
-
-            var existingItem = cart.find(item => item.product_id == productId);
-            if (existingItem) {
-                existingItem.quantity += 1;
-            } else {
-                cart.push({
-                    product_id: productId,
-                    name: productName,
-                    price: productPrice,
-                    quantity: 1
-                });
-            }
-
-            updateCart();
-        });
-
-        $('#cart-items').on('click', '.remove-item', function() {
-            var productId = $(this).data('product-id');
-            cart = cart.filter(item => item.product_id != productId);
-            updateCart();
-        });
-
-        $('#cart-items').on('input', '.quantity-input', function() {
-            var productId = $(this).data('product-id');
-            var quantity = parseInt($(this).val());
-            var item = cart.find(item => item.product_id == productId);
-            if (item) {
-                item.quantity = quantity;
-                updateCart();
-            }
-        });
-
-        $('#clear-cart').on('click', function() {
-            cart = [];
-            updateCart();
-        });
-
-        $('#complete-sale-form').on('submit', function(e) {
-            e.preventDefault();
-            $.ajax({
-                type: 'POST',
-                url: 'complete_sale.php',
-                data: {
-                    action: 'complete_sale',
-                    cart: JSON.stringify(cart)
-                },
-                dataType: 'json',
-                success: function(response) {
-                    if (response.status === 'success') {
-                        alert(response.message);
-                        cart = [];
-                        updateCart();
-                    } else {
-                        alert(response.message);
-                    }
-                }
-            });
-        });
-
-        function updateCart() {
-            var cartItems = $('#cart-items');
-            cartItems.empty();
-            if (cart.length > 0) {
-                cart.forEach(function(item) {
-                    cartItems.append(
-                        '<tr>' +
-                        '<td>' + item.name + '</td>' +
-                        '<td>' + item.price + '</td>' +
-                        '<td><input type="number" class="form-control quantity-input" data-product-id="' +
-                        item.product_id + '" value="' + item.quantity + '" min="1"></td>' +
-                        '<td>' + (item.price * item.quantity).toFixed(2) + '</td>' +
-                        '<td><button class="btn btn-danger btn-sm remove-item" data-product-id="' +
-                        item.product_id + '">Remove</button></td>' +
-                        '</tr>'
-                    );
-                });
-                $('#clear-cart').show();
-                $('#complete-sale-form').show();
-            } else {
-                cartItems.append('<tr><td colspan="5">No items in cart</td></tr>');
-                $('#clear-cart').hide();
-                $('#complete-sale-form').hide();
-            }
+    // Add product to cart on Enter key press
+    $('.select2-search__field').on('keypress', function(e) {
+        if (e.which === 13) { // 13 is the Enter key
+            $('#add-to-cart-form').submit();
         }
     });
+
+    var cart = [];
+
+    // Handle the Add to Cart form submission
+    $('#add-to-cart-form').on('submit', function(e) {
+        e.preventDefault();
+        var productId = $('#product_id').val();
+        var productName = $('#product_id option:selected').text().split(' - $')[0];
+        var productPrice = parseFloat($('#product_id option:selected').text().split(' - $')[1]);
+
+        var existingItem = cart.find(item => item.product_id == productId);
+        if (existingItem) {
+            existingItem.quantity += 1;
+        } else {
+            cart.push({
+                product_id: productId,
+                name: productName,
+                price: productPrice,
+                quantity: 1
+            });
+        }
+
+        updateCart();
+        focusSelect2();
+    });
+
+    // Remove item from cart
+    $('#cart-items').on('click', '.remove-item', function() {
+        var productId = $(this).data('product-id');
+        cart = cart.filter(item => item.product_id != productId);
+        updateCart();
+        focusSelect2();
+    });
+
+    // Handle quantity change in cart
+    $('#cart-items').on('input', '.quantity-input', function() {
+        var productId = $(this).data('product-id');
+        var quantity = parseInt($(this).val());
+        var item = cart.find(item => item.product_id == productId);
+        if (item) {
+            item.quantity = quantity;
+            updateCart();
+            focusSelect2();
+        }
+    });
+
+    // Clear cart button
+    $('#clear-cart').on('click', function() {
+        cart = [];
+        updateCart();
+        focusSelect2();
+    });
+
+    // Complete Sale form
+    $('#complete-sale-form').on('submit', function(e) {
+        e.preventDefault();
+        $('#loading-overlay').show();
+        $.ajax({
+            type: 'POST',
+            url: 'complete_sale.php',
+            data: {
+                action: 'complete_sale',
+                cart: JSON.stringify(cart)
+            },
+            dataType: 'json',
+            success: function(response) {
+                $('#loading-overlay').hide();
+                if (response.status === 'success') {
+                    alert(response.message);
+                    cart = [];
+                    updateCart();
+                } else {
+                    alert(response.message);
+                }
+                focusSelect2();
+            },
+            error: function() {
+                $('#loading-overlay').hide();
+                alert('An error occurred while completing the sale.');
+                focusSelect2();
+            }
+        });
+    });
+
+    // Update the cart UI
+    function updateCart() {
+        var cartItems = $('#cart-items');
+        cartItems.empty();
+        if (cart.length > 0) {
+            cart.forEach(function(item) {
+                cartItems.append(
+                    '<tr>' +
+                    '<td>' + item.name + '</td>' +
+                    '<td>' + item.price + '</td>' +
+                    '<td><input type="number" class="form-control quantity-input" data-product-id="' +
+                    item.product_id + '" value="' + item.quantity + '" min="1"></td>' +
+                    '<td>' + (item.price * item.quantity).toFixed(2) + '</td>' +
+                    '<td><button class="btn btn-danger btn-sm remove-item" data-product-id="' +
+                    item.product_id + '">Remove</button></td>' +
+                    '</tr>'
+                );
+            });
+            $('#clear-cart').show();
+            $('#complete-sale-form').show();
+        } else {
+            cartItems.append('<tr><td colspan="5">No items in cart</td></tr>');
+            $('#clear-cart').hide();
+            $('#complete-sale-form').hide();
+        }
+    }
+
+    // Function to open Select2 and focus on the input
+    function focusSelect2() {
+        $('#product_id').select2('open');
+    }
+
+    // Initial focus on Select2 input field
+    focusSelect2();
+});
+
     </script>
 </body>
 
