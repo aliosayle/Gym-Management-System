@@ -1,0 +1,254 @@
+<?php
+// Enable error reporting
+error_reporting(E_ALL);
+ini_set('display_errors', 1);
+
+include 'layouts/session.php';
+include 'layouts/head-main.php';
+include 'layouts/config.php';
+
+if (!$pdo) {
+    die("Connection not established: " . $pdo->errorInfo());
+}
+
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+
+if (isset($_SESSION['delete_message'])) {
+    $alert_type = strpos($_SESSION['delete_message'], 'successfully') !== false ? 'success' : 'danger';
+    echo "<div class='alert alert-$alert_type alert-dismissible fade show' role='alert'>" . htmlspecialchars($_SESSION['delete_message']) . "<button type='button' class='btn-close' data-bs-dismiss='alert' aria-label='Close'></button></div>";
+    unset($_SESSION['delete_message']); // Unset after displaying the message
+}
+
+// Fetch user permissions
+$user_id = $_SESSION['id']; // Assuming user_id is stored in session
+$permission_query = "SELECT canedit, candelete, canadd FROM users WHERE id = :id";
+$permission_stmt = $pdo->prepare($permission_query);
+$permission_stmt->execute(['id' => $user_id]);
+$permissions = $permission_stmt->fetch(PDO::FETCH_ASSOC);
+
+// Protect POST actions with permission checks
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['product_name']) && $permissions['canadd'] == 1) {
+    $product_name = $_POST['product_name'];
+    $description = $_POST['description'];
+    $price = $_POST['price'];
+    $quantity_in_stock = (int)$_POST['quantity_in_stock'];
+    $insert_query = "INSERT INTO products (name, description, price, quantity_in_stock) VALUES (:product_name, :description, :price, :quantity_in_stock)";
+    $insert_stmt = $pdo->prepare($insert_query);
+    if ($insert_stmt->execute(['product_name' => $product_name, 'description' => $description, 'price' => $price, 'quantity_in_stock' => $quantity_in_stock])) {
+        echo "<script>alert('New product added successfully');</script>";
+    } else {
+        echo "<script>alert('Error adding product: " . implode(", ", $insert_stmt->errorInfo()) . "');</script>";
+    }
+} elseif ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    echo "<script>alert('You do not have permission to add products.');</script>";
+}
+?>
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>Products Table | Admin Template</title>
+    <?php include 'layouts/head.php'; ?>
+    <link href="assets/libs/datatables.net-bs4/css/dataTables.bootstrap4.min.css" rel="stylesheet" type="text/css" />
+    <link href="assets/libs/datatables.net-buttons-bs4/css/buttons.bootstrap4.min.css" rel="stylesheet" type="text/css" />
+    <link href="assets/libs/datatables.net-responsive-bs4/css/responsive.bootstrap4.min.css" rel="stylesheet" type="text/css" />
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="assets/libs/sweetalert2/sweetalert2.min.css" rel="stylesheet" type="text/css" />
+    <?php include 'layouts/head-style.php'; ?>
+</head>
+
+<body>
+<?php include 'layouts/body.php'; ?>
+
+<div id="layout-wrapper">
+    <?php include 'layouts/menu.php'; ?>
+    <div class="main-content">
+        <div class="page-content">
+            <div class="container-fluid">
+                <div class="row">
+                    <div class="col-12">
+                        <nav aria-label="breadcrumb">
+                            <ol class="breadcrumb mb-3">
+                                <li class="breadcrumb-item">Login</li>
+                                <li class="breadcrumb-item active" aria-current="page">Products</li>
+                            </ol>
+                        </nav>
+                        <div class="card">
+                            <div class="card-header d-flex justify-content-between align-items-center">
+                                <h4 class="card-title">Products Table</h4>
+                            </div>
+                            <div class="card-body">
+                                <a href="Admin/add_product.php" class="btn btn-primary mb-4" <?php if ($permissions['canadd'] == 0) echo 'style="pointer-events: none; opacity: 0.6;"'; ?>>
+                                    <i class="fas fa-plus me-2"></i> Add New Product
+                                </a>
+
+                                <table id="datatable" class="table table-bordered dt-responsive nowrap w-100">
+                                    <thead>
+                                        <tr>
+                                            <th>Name</th>
+                                            <th>Description</th>
+                                            <th>Price</th>
+                                            <th>Quantity in Stock</th>
+                                            <th>Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <?php 
+                                        $query = "SELECT * FROM products";
+                                        $stmt = $pdo->prepare($query);
+                                        $stmt->execute();
+                                        $result = $stmt->fetchAll(PDO::FETCH_ASSOC);
+                                        if ($result) {
+                                            foreach ($result as $row) {
+                                                echo "<tr>";
+                                                echo "<td>" . htmlspecialchars($row['name']) . "</td>";
+                                                echo "<td>" . htmlspecialchars($row['description']) . "</td>";
+                                                echo "<td>" . htmlspecialchars($row['price']) . "</td>";
+                                                echo "<td>" . htmlspecialchars($row['quantity_in_stock']) . "</td>";
+                                                echo "<td class='text-center'>";
+
+                                                // Edit Button
+                                                echo "<form method='POST' action='edit_product.php?id={$row['product_id']}' style='display:inline-block;' onsubmit='return submitForm(this);'>";
+                                                echo "<input type='hidden' name='product_id' value='" . htmlspecialchars($row['product_id']) . "'>";
+                                                echo "<button type='submit' class='btn btn-success btn-sm action-button' " . ($permissions['canedit'] == 0 ? 'style="pointer-events: none; opacity: 0.6;"' : '') . ">
+                                                        <i class='mdi mdi-pencil d-block font-size-16'></i>
+                                                      </button>";
+                                                echo "</form>";
+
+                                                // Delete Button with SweetAlert
+                                                echo "<button type='button' class='btn btn-danger btn-sm action-button sa-warning' data-id='" . htmlspecialchars($row['product_id']) . "' " . ($permissions['candelete'] == 0 ? 'disabled' : '') . ">
+                                                        <i class='mdi mdi-trash-can d-block font-size-16'></i>
+                                                      </button>";
+
+                                                // Restock Button with SweetAlert
+                                                echo "<button type='button' class='btn btn-info btn-sm action-button sa-restock' data-id='" . htmlspecialchars($row['product_id']) . "' " . ($permissions['canedit'] == 0 ? 'disabled' : '') . ">
+                                                        <i class='mdi mdi-plus-box d-block font-size-16'></i>
+                                                      </button>";
+
+                                                echo "</td>";
+                                                echo "</tr>";
+                                            }
+                                        } else {
+                                            echo "<tr><td colspan='5'>No data found</td></tr>";
+                                        }
+                                        ?>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<?php include 'layouts/footer.php'; ?>
+</div>
+
+<?php include 'layouts/vendor-scripts.php'; ?>
+
+<script src="assets/libs/datatables.net/js/jquery.dataTables.min.js"></script>
+<script src="assets/libs/datatables.net-bs4/js/dataTables.bootstrap4.min.js"></script>
+<script src="assets/libs/datatables.net-buttons/js/dataTables.buttons.min.js"></script>
+<script src="assets/libs/datatables.net-buttons-bs4/js/buttons.bootstrap4.min.js"></script>
+<script src="assets/libs/jszip/jszip.min.js"></script>
+<script src="assets/libs/pdfmake/build/pdfmake.min.js"></script>
+<script src="assets/libs/pdfmake/build/vfs_fonts.js"></script>
+<script src="assets/libs/datatables.net-buttons/js/buttons.html5.min.js"></script>
+<script src="assets/libs/datatables.net-buttons/js/buttons.print.min.js"></script>
+<script src="assets/libs/datatables.net-responsive/js/dataTables.responsive.min.js"></script>
+<script src="assets/libs/datatables.net-responsive-bs4/js/responsive.bootstrap4.min.js"></script>
+<script src="assets/libs/apexcharts/apexcharts.min.js"></script>
+<script src="assets/libs/admin-resources/jquery.vectormap/jquery-jvectormap-1.2.2.min.js"></script>
+<script src="assets/libs/admin-resources/jquery.vectormap/maps/jquery-jvectormap-world-mill-en.js"></script>
+<script src="assets/js/pages/dashboard.init.js"></script>
+<script src="assets/js/app.js"></script>
+<script>
+    function submitForm(form) {
+        var productId = form.querySelector('input[name="product_id"]').value;
+        if (!productId) {
+            alert('Product ID is missing');
+            return false;
+        }
+        return true;
+    }
+</script>
+<script src="assets/libs/sweetalert2/sweetalert2.min.js"></script>
+<script>
+    $(document).ready(function() {
+        $.fn.dataTable.ext.errMode = 'none'; // Disable DataTables warnings
+        $('#datatable').DataTable({
+            "searching": true,
+            "paging": true,
+            "info": true,
+            "responsive": true
+        });
+
+        // SweetAlert for delete button
+        $('.sa-warning').on('click', function () {
+            var productId = $(this).data('id');
+            Swal.fire({
+                title: 'Are you sure?',
+                text: "You won't be able to revert this!",
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#3085d6',
+                cancelButtonColor: '#d33',
+                confirmButtonText: 'Yes, delete it!'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    window.location.href = 'delete_product.php?id=' + productId;
+                }
+            })
+        });
+
+        // SweetAlert for restock button
+        $('.sa-restock').on('click', function () {
+            var productId = $(this).data('id');
+            Swal.fire({
+                title: 'Restock Product',
+                input: 'number',
+                inputAttributes: {
+                    min: 1,
+                    step: 1
+                },
+                inputLabel: 'Enter quantity to restock',
+                showCancelButton: true,
+                confirmButtonText: 'Restock',
+                showLoaderOnConfirm: true,
+                preConfirm: (quantity) => {
+                    return fetch(`restock_product.php?id=${productId}&quantity=${quantity}`)
+                        .then(response => {
+                            if (!response.ok) {
+                                throw new Error(response.statusText)
+                            }
+                            return response.json()
+                        })
+                        .catch(error => {
+                            Swal.showValidationMessage(
+                                `Request failed: ${error}`
+                            )
+                        })
+                },
+                allowOutsideClick: () => !Swal.isLoading()
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    Swal.fire({
+                        title: 'Restocked!',
+                        text: 'Product has been restocked.',
+                        icon: 'success'
+                    }).then(() => {
+                        location.reload();
+                    });
+                }
+            })
+        });
+    });
+</script>
+
+</body>
+</html>

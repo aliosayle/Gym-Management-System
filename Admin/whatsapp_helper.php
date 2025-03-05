@@ -1,5 +1,6 @@
 <?php
 
+//replace this with your actual whatstapp api keys
 include 'layouts/api_keys.php';
 
 function sendWhatsAppMessage($phoneNumber, $messageBody) {

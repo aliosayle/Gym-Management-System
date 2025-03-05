@@ -89,9 +89,9 @@
         <div class="p-2">
             <div class="row g-0">
                 <div class="col">
-                    <a class="dropdown-icon-item" href="chat.php">
-                        <i class="fas fa-comments"></i>  <!-- Chat Icon -->
-                        <span>Chat</span>
+                    <a class="dropdown-icon-item" href="pos.php">
+                        <i class="fas fa-cash-register"></i>  <!-- POS Icon -->
+                        <span>POS</span>
                     </a>
                 </div>
                 <div class="col">
@@ -159,9 +159,9 @@
                         <i data-feather="file-text"></i>
                         <span data-key="t-dashboard">Clients</span>
                     </a>
-                    <a href="#">
+                    <a href="products.php">
                         <i data-feather="navigation"></i>
-                        <span data-key="t-dashboard">Title 2</span>
+                        <span data-key="t-dashboard">Products</span>
                     </a>
                 </li>
 
@@ -174,7 +174,7 @@
                 <li>
                 <a href="packages.php">
     <i data-feather="box"></i>
-    <span data-key="t-components">Package</span>
+    <span data-key="t-components">Packages</span>
 </a>
 
 
