@@ -198,7 +198,7 @@ if ($alert_check_stmt->rowCount() == 0) {
                                                 echo "<tr>";
                                                 echo "<td>" . htmlspecialchars($row['name']);
                                                 if ($has_pending_payment) {
-                                                    echo " <span class='badge bg-warning'>Pending Payment</span>";
+                                                    echo " <span class='badge bg-warning'>Pending Payment: $" . htmlspecialchars($pending_payment['amount']) . "</span>";
                                                 }
                                                 echo "</td>";
                                                 echo "<td>" . htmlspecialchars($row['phone_number']) . "</td>";
