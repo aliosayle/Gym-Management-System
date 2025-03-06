@@ -5,16 +5,19 @@ include 'layouts/session.php';
 
 // Check if the user is an admin
 $user_id = $_SESSION['id'];
-$permission_query = "SELECT isadmin FROM users WHERE id = '$user_id'";
-$permission_result = mysqli_query($link, $permission_query);
-$permissions = mysqli_fetch_assoc($permission_result);
+$permission_query = "SELECT isadmin FROM users WHERE id = :user_id";
+$permission_stmt = $pdo->prepare($permission_query);
+$permission_stmt->bindParam(':user_id', $user_id, PDO::PARAM_INT);
+$permission_stmt->execute();
+$permissions = $permission_stmt->fetch(PDO::FETCH_ASSOC);
 if ($permissions['isadmin'] != 1) {
     // If the user is not an admin, redirect to the error page or home page
     header("location: error.php");
     exit;
 }
+
 // Define variables and initialize with empty values
-$useremail = $username =  $password = $confirm_password = "";
+$useremail = $username = $password = $confirm_password = "";
 $useremail_err = $username_err = $password_err = $confirm_password_err = "";
 
 // Processing form data when form is submitted
@@ -27,32 +30,20 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         $useremail_err = "Invalid email format";
     } else {
         // Prepare a select statement
-        $sql = "SELECT id FROM users WHERE useremail = ?";
+        $sql = "SELECT id FROM users WHERE useremail = :useremail";
+        $stmt = $pdo->prepare($sql);
+        $stmt->bindParam(':useremail', $param_useremail, PDO::PARAM_STR);
+        $param_useremail = trim($_POST["useremail"]);
 
-        if ($stmt = mysqli_prepare($link, $sql)) {
-            // Bind variables to the prepared statement as parameters
-            mysqli_stmt_bind_param($stmt, "s", $param_useremail);
-
-            // Set parameters
-            $param_useremail = trim($_POST["useremail"]);
-
-            // Attempt to execute the prepared statement
-            if (mysqli_stmt_execute($stmt)) {
-                /* store result */
-                mysqli_stmt_store_result($stmt);
-
-                if (mysqli_stmt_num_rows($stmt) == 1) {
-                    $useremail_err = "This useremail is already taken.";
-                } else {
-                    $useremail = trim($_POST["useremail"]);
-                }
+        // Attempt to execute the prepared statement
+        if ($stmt->execute()) {
+            if ($stmt->rowCount() == 1) {
+                $useremail_err = "This useremail is already taken.";
             } else {
-                echo "Oops! Something went wrong. Please try again later.";
+                $useremail = trim($_POST["useremail"]);
             }
-
-            // Close statement
-            mysqli_stmt_close($stmt);
-            
+        } else {
+            echo "Oops! Something went wrong. Please try again later.";
         }
     }
 
@@ -67,7 +58,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     if (empty(trim($_POST["password"]))) {
         $password_err = "Please enter a password.";
     } elseif (strlen(trim($_POST["password"])) < 6) {
-        $password_err = "Password must have atleast 6 characters.";
+        $password_err = "Password must have at least 6 characters.";
     } else {
         $password = trim($_POST["password"]);
     }
@@ -86,33 +77,32 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     if (empty($useremail_err) && empty($username_err) && empty($password_err) && empty($confirm_password_err)) {
 
         // Prepare an insert statement
-        $sql = "INSERT INTO users (useremail, username, password, token) VALUES (?, ?, ?, ?)";
+        $sql = "INSERT INTO users (useremail, username, password, token) VALUES (:useremail, :username, :password, :token)";
+        $stmt = $pdo->prepare($sql);
 
-        if ($stmt = mysqli_prepare($link, $sql)) {
-            // Bind variables to the prepared statement as parameters
-            mysqli_stmt_bind_param($stmt, "ssss", $param_useremail, $param_username, $param_password, $param_token);
+        // Set parameters
+        $param_useremail = $useremail;
+        $param_username = $username;
+        $param_password = password_hash($password, PASSWORD_DEFAULT); // Creates a password hash
+        $param_token = bin2hex(random_bytes(50)); // generate unique token
 
-            // Set parameters
-            $param_useremail = $useremail;
-            $param_username = $username;
-            $param_password = password_hash($password, PASSWORD_DEFAULT); // Creates a password hash
-            $param_token = bin2hex(random_bytes(50)); // generate unique token
+        // Bind variables to the prepared statement as parameters
+        $stmt->bindParam(':useremail', $param_useremail, PDO::PARAM_STR);
+        $stmt->bindParam(':username', $param_username, PDO::PARAM_STR);
+        $stmt->bindParam(':password', $param_password, PDO::PARAM_STR);
+        $stmt->bindParam(':token', $param_token, PDO::PARAM_STR);
 
-            // Attempt to execute the prepared statement
-            if (mysqli_stmt_execute($stmt)) {
-                // Redirect to login page
-                header("location: index.php");
-            } else {
-                echo "Something went wrong. Please try again later.";
-            }
-
-            // Close statement
-            mysqli_stmt_close($stmt);
+        // Attempt to execute the prepared statement
+        if ($stmt->execute()) {
+            // Redirect to login page
+            header("location: index.php");
+        } else {
+            echo "Something went wrong. Please try again later.";
         }
     }
 
     // Close connection
-    mysqli_close($link);
+    $pdo = null;
 }
 ?>
 <?php include 'layouts/head-main.php'; ?>
@@ -253,8 +243,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                                                     on myself. It's a lot more progressing fun than looking back.
                                                     That's why
                                                     I ultricies enim
-                                                    at malesuada nibh diam on tortor neaded to throw curve balls.”
-                                                </h4>
+                                                    at malesuada nibh diam on tortor neaded to throw curve balls.”</h4>
                                                 <div class="mt-4 pt-3 pb-5">
                                                     <div class="d-flex align-items-start">
                                                         <div class="flex-shrink-0">
