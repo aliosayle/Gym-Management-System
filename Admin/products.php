@@ -81,7 +81,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['product_name']) && $p
                                 <h4 class="card-title">Products Table</h4>
                             </div>
                             <div class="card-body">
-                                <a href="Admin/add_product.php" class="btn btn-primary mb-4" <?php if ($permissions['canadd'] == 0) echo 'style="pointer-events: none; opacity: 0.6;"'; ?>>
+                                <a href="add_product.php" class="btn btn-primary mb-4" <?php if ($permissions['canadd'] == 0) echo 'style="pointer-events: none; opacity: 0.6;"'; ?>>
                                     <i class="fas fa-plus me-2"></i> Add New Product
                                 </a>
 

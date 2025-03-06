@@ -144,7 +144,7 @@
                         $row = $stmt->fetch();
                         $total_sales_today = $row['total_sales_today'];
                         ?>
-                        <a href="sales.php?filter=today">
+                        <a href="sales.php?from_date=<?php echo date('Y-m-d'); ?>&to_date=<?php echo date('Y-m-d'); ?>">
                             <div class="card card-h-100">
                                 <!-- card body -->
                                 <div class="card-body">
@@ -290,24 +290,33 @@ console.log("https://www.youtube.com/watch?v=dQw4w9WgXcQ");
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     var ctx = document.getElementById('subscribersChart').getContext('2d');
+    var colors = [
+        'rgba(255, 99, 132, 0.2)', 'rgba(54, 162, 235, 0.2)', 'rgba(255, 206, 86, 0.2)',
+        'rgba(75, 192, 192, 0.2)', 'rgba(153, 102, 255, 0.2)', 'rgba(255, 159, 64, 0.2)'
+    ];
+    var borderColors = [
+        'rgba(255, 99, 132, 1)', 'rgba(54, 162, 235, 1)', 'rgba(255, 206, 86, 1)',
+        'rgba(75, 192, 192, 1)', 'rgba(153, 102, 255, 1)', 'rgba(255, 159, 64, 1)'
+    ];
+    var datasets = [];
+    <?php $index = 0; foreach ($packages as $package_name => $data): ?>
+    datasets.push({
+        label: '<?php echo htmlspecialchars($package_name); ?>',
+        data: <?php echo json_encode(array_values($data)); ?>,
+        backgroundColor: colors[<?php echo $index; ?> % colors.length],
+        borderColor: borderColors[<?php echo $index; ?> % borderColors.length],
+        borderWidth: 1,
+        fill: true
+    });
+    <?php $index++; endforeach; ?>
+    
     var subscribersChart = new Chart(ctx, {
         type: 'line',
         data: {
             labels: ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August',
                 'September', 'October', 'November', 'December'
             ],
-            datasets: [
-                <?php foreach ($packages as $package_name => $data): ?>
-                {
-                    label: '<?php echo htmlspecialchars($package_name); ?>',
-                    data: <?php echo json_encode(array_values($data)); ?>,
-                    backgroundColor: 'rgba(54, 162, 235, 0.2)',
-                    borderColor: 'rgba(54, 162, 235, 1)',
-                    borderWidth: 1,
-                    fill: true
-                },
-                <?php endforeach; ?>
-            ]
+            datasets: datasets
         },
         options: {
             scales: {
