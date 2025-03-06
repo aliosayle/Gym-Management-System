@@ -255,8 +255,12 @@ $products = $stmt->fetchAll(PDO::FETCH_ASSOC);
             var barcode = $(this).val();
             var productId = getProductIdByBarcode(barcode);
             if (productId) {
-                addItemToCart(productId);
-                $(this).val(''); // Clear the input field
+            addItemToCart(productId);
+            $(this).val(''); // Clear the input field
+            }
+        }).on('keypress', function(e) {
+            if (e.which == 13) { // Enter key pressed
+            $(this).val(''); // Clear the input field
             }
         });
 
