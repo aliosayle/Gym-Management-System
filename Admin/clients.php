@@ -27,8 +27,13 @@ $permission_stmt = $pdo->prepare($permission_query);
 $permission_stmt->execute(['id' => $user_id]);
 $permissions = $permission_stmt->fetch(PDO::FETCH_ASSOC);
 
+// Ensure permissions array contains the necessary keys
+$canedit = isset($permissions['canedit']) ? $permissions['canedit'] : 0;
+$candelete = isset($permissions['candelete']) ? $permissions['candelete'] : 0;
+$canadd = isset($permissions['canadd']) ? $permissions['canadd'] : 0;
+
 // Protect POST actions with permission checks
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['client_name']) && $permissions['canadd'] == 1) {
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['client_name']) && $canadd == 1) {
     $client_name = $_POST['client_name'];
     $insert_query = "INSERT INTO clients (name) VALUES (:client_name)";
     $insert_stmt = $pdo->prepare($insert_query);
@@ -156,7 +161,7 @@ if ($alert_check_stmt->rowCount() == 0) {
                             </div>
                             <div class="card-body">
                                 <form method="POST" action="add_client.php" class="mb-4">
-                                    <button type="submit" class="btn btn-primary" <?php if ($permissions['canadd'] == 0) echo 'style="pointer-events: none; opacity: 0.6;"'; ?>>
+                                    <button type="submit" class="btn btn-primary" <?php if ($canadd == 0) echo 'style="pointer-events: none; opacity: 0.6;"'; ?>>
                                         <i class="fas fa-plus me-2"></i> Add New Client
                                     </button>
                                 </form>
@@ -182,7 +187,7 @@ if ($alert_check_stmt->rowCount() == 0) {
                                         $query = "SELECT * FROM clients WHERE client_id IN (SELECT client_id FROM payments WHERE payment_status = 'pending')";
                                     } else {
                                         $query = "SELECT * FROM clients";
-                                    }
+                                    }   
                                         $stmt = $pdo->prepare($query);
                                         $stmt->execute();
                                         $result = $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -210,13 +215,13 @@ if ($alert_check_stmt->rowCount() == 0) {
                                                 // Edit Button
                                                 echo "<form method='POST' action='edit_client.php' style='display:inline-block;' onsubmit='return submitForm(this);'>";
                                                 echo "<input type='hidden' name='client_id' value='" . $client_id . "'>";
-                                                echo "<button type='submit' class='btn btn-success btn-sm action-button' " . ($permissions['canedit'] == 0 ? 'style="pointer-events: none; opacity: 0.6;"' : '') . ">
+                                                echo "<button type='submit' class='btn btn-success btn-sm action-button' " . ($canedit == 0 ? 'style="pointer-events: none; opacity: 0.6;"' : '') . ">
                                                         <i class='mdi mdi-pencil d-block font-size-16'></i>
                                                       </button>";
                                                 echo "</form>";
 
                                                 // Delete Button with SweetAlert
-                                                echo "<button type='button' class='btn btn-danger btn-sm action-button sa-warning' data-id='" . $client_id . "' " . ($permissions['candelete'] == 0 ? 'disabled' : '') . ">
+                                                echo "<button type='button' class='btn btn-danger btn-sm action-button sa-warning' data-id='" . $client_id . "' " . ($candelete == 0 ? 'disabled' : '') . ">
                                                         <i class='mdi mdi-trash-can d-block font-size-16'></i>
                                                       </button>";
 

@@ -1,3 +1,15 @@
+<?php
+//include 'layouts/config.php'; // Include the config file where $pdo is defined
+
+// Fetch user permissions
+$user_id = $_SESSION['id']; // Assuming user_id is stored in session
+$permission_query = "SELECT isadmin FROM users WHERE id = :id";
+$permission_stmt = $pdo->prepare($permission_query);
+$permission_stmt->execute(['id' => $user_id]);
+$permissions = $permission_stmt->fetch(PDO::FETCH_ASSOC);
+$is_admin = $permissions['isadmin'];
+?>
+
 <header id="page-topbar">
     <div class="navbar-header">
         <div class="d-flex">
@@ -94,12 +106,7 @@
                         <span>POS</span>
                     </a>
                 </div>
-                <div class="col">
-                    <a class="dropdown-icon-item" href="report.php">
-                        <i class="fas fa-file-alt"></i>  <!-- Report Icon -->
-                        <span>Report</span>
-                    </a>
-                </div>
+
             </div>
         </div>
     </div>
@@ -151,36 +158,32 @@
                 <li class="menu-title" data-key="t-menu"><?php echo $language["Menu"]; ?></li>
 
                 <li>
-                    <a href="index.php">
-                        <i data-feather="home"></i>
-                        <span data-key="t-dashboard"><?php echo $language["Dashboard"]; ?></span>
-                    </a>
                     <a href="clients.php">
                         <i data-feather="file-text"></i>
                         <span data-key="t-dashboard">Clients</span>
                     </a>
-                    <a href="products.php">
-                        <i data-feather="navigation"></i>
-                        <span data-key="t-dashboard">Products</span>
-                    </a>
+                    <?php if ($is_admin) { ?>
+                        <a href="index.php">
+                            <i data-feather="home"></i>
+                            <span data-key="t-dashboard"><?php echo $language["Dashboard"]; ?></span>
+                        </a>
+                        <a href="products.php">
+                            <i data-feather="navigation"></i>
+                            <span data-key="t-dashboard">Products</span>
+                        </a>
+                    <?php } ?>
                 </li>
-
-                
-
-                
 
                 <li class="menu-title mt-2" data-key="t-components"><?php echo $language["Elements"]; ?></li>
 
-                <li>
-                <a href="packages.php">
-    <i data-feather="box"></i>
-    <span data-key="t-components">Packages</span>
-</a>
-
-
-                    
-
-                
+                <?php if ($is_admin) { ?>
+                    <li>
+                        <a href="packages.php">
+                            <i data-feather="box"></i>
+                            <span data-key="t-components">Packages</span>
+                        </a>
+                    </li>
+                <?php } ?>
             </ul>
         </div>
         <!-- Sidebar -->
