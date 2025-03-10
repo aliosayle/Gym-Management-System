@@ -1,5 +1,24 @@
-<?php include 'layouts/session.php'; ?>
-<?php include 'layouts/head-main.php'; ?>
+<?php
+include 'layouts/session.php';
+include 'layouts/head-main.php';
+include 'layouts/config.php';
+
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+
+// Check if user is admin
+$user_id = $_SESSION['id']; // Assuming user_id is stored in session
+$admin_check_query = "SELECT isadmin, canadd, candelete, canedit FROM users WHERE id = :id";
+$admin_check_stmt = $pdo->prepare($admin_check_query);
+$admin_check_stmt->execute(['id' => $user_id]);
+$isadmin = $admin_check_stmt->fetchColumn();
+
+if ($isadmin != 1) {
+    header("Location: clients.php");
+    exit();
+}
+?>
 
 <head>
     <title><?php echo $language["Dashboard"]; ?> | GMS</title>
@@ -49,7 +68,6 @@
 
                     <div class="col-xl-3 col-md-6">
                         <?php
-                        include "layouts/config.php";
                         // Fetch the total number of clients
                         $query = "SELECT COUNT(*) AS count FROM clients";
                         $stmt = $pdo->prepare($query);

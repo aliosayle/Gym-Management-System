@@ -10,9 +10,6 @@ if (!$pdo) {
     die("Connection not established: " . $pdo->errorInfo());
 }
 
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
-}
 
 if (isset($_SESSION['delete_message'])) {
     $alert_type = strpos($_SESSION['delete_message'], 'successfully') !== false ? 'success' : 'danger';
@@ -20,12 +17,30 @@ if (isset($_SESSION['delete_message'])) {
     unset($_SESSION['delete_message']); // Unset after displaying the message
 }
 
+
 // Fetch user permissions
-$user_id = $_SESSION['id']; // Assuming user_id is stored in session
-$permission_query = "SELECT canedit, candelete, canadd FROM users WHERE id = :id";
+
+$user_id = isset($_SESSION['id']) ? $_SESSION['id'] : null; // Ensure user_id is set
+
+if ($user_id === null) {
+    die("User ID is not set in the session.");
+}
+
+$permission_query = "SELECT canedit, candelete, canadd, isadmin FROM users WHERE id = :id";
 $permission_stmt = $pdo->prepare($permission_query);
 $permission_stmt->execute(['id' => $user_id]);
 $permissions = $permission_stmt->fetch(PDO::FETCH_ASSOC);
+
+// Check if $permissions is false (no user found)
+if ($permissions === false) {
+    die("No permissions found for the given user.");
+}
+
+// Ensure permissions are set to 0 or 1 (as boolean values)
+// $canedit = (int) $permissions['canedit']; // Cast to integer (either 0 or 1)
+// $candelete = (int) $permissions['candelete']; // Cast to integer (either 0 or 1)
+// $canadd = (int) $permissions['canadd']; // Cast to integer (either 0 or 1)
+// $isadmin = isset($permissions['isadmin']) ? (int) $permissions['isadmin'] : 0; // Cast to integer (either 0 or 1)
 
 // Protect POST actions with permission checks
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['package_name']) && $permissions['canadd'] == 1) {
@@ -80,6 +95,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['package_name']) && $p
                             </div>
                             <div class="card-body">
                                 <form method="POST" action="add_package.php" class="mb-4">
+                                    <?php                                         $permission_query = "SELECT canedit, candelete, canadd, isadmin FROM users WHERE id = :id";
+                                        $permission_stmt = $pdo->prepare($permission_query);
+                                        $permission_stmt->execute(['id' => $user_id]);
+                                        $permissions = $permission_stmt->fetch(PDO::FETCH_ASSOC);
+                                        
+                                        // Check if $permissions is false (no user found)
+                                        if ($permissions === false) {
+                                            die("No permissions found for the given user.");
+                                        }
+                                        ?>
                                     <button type="submit" class="btn btn-primary" <?php if ($permissions['canadd'] == 0) echo 'style="pointer-events: none; opacity: 0.6;"'; ?>>
                                         <i class="fas fa-plus me-2"></i> Add New Package
                                     </button>
@@ -96,6 +121,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['package_name']) && $p
                                     </thead>
                                     <tbody>
                                         <?php 
+                                        $user_id = isset($_SESSION['id']) ? $_SESSION['id'] : null; // Ensure user_id is set
+
+                                        if ($user_id === null) {
+                                            die("User ID is not set in the session.");
+                                        }
+                                        
+
                                         $query = "SELECT * FROM packages";
                                         $stmt = $pdo->prepare($query);
                                         $stmt->execute();

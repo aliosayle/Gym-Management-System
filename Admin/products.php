@@ -22,14 +22,30 @@ if (isset($_SESSION['delete_message'])) {
 }
 
 // Fetch user permissions
-$user_id = $_SESSION['id']; // Assuming user_id is stored in session
+
+$user_id = isset($_SESSION['id']) ? $_SESSION['id'] : null; // Ensure user_id is set
+
+if ($user_id === null) {
+    die("User ID is not set in the session.");
+}
+
 $permission_query = "SELECT canedit, candelete, canadd FROM users WHERE id = :id";
 $permission_stmt = $pdo->prepare($permission_query);
 $permission_stmt->execute(['id' => $user_id]);
 $permissions = $permission_stmt->fetch(PDO::FETCH_ASSOC);
 
+// Check if $permissions is false (no user found)
+if ($permissions === false) {
+    die("No permissions found for the given user.");
+}
+
+// Ensure permissions are set to 0 or 1 (as boolean values)
+$canedit = (int) $permissions['canedit']; // Cast to integer (either 0 or 1)
+$candelete = (int) $permissions['candelete']; // Cast to integer (either 0 or 1)
+$canadd = (int) $permissions['canadd']; // Cast to integer (either 0 or 1)
+
 // Protect POST actions with permission checks
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['product_name']) && $permissions['canadd'] == 1) {
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['product_name']) && $canadd == 1) {
     $product_name = $_POST['product_name'];
     $description = $_POST['description'];
     $price = $_POST['price'];
@@ -81,7 +97,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['product_name']) && $p
                                 <h4 class="card-title">Products Table</h4>
                             </div>
                             <div class="card-body">
-                                <a href="add_product.php" class="btn btn-primary mb-4" <?php if ($permissions['canadd'] == 0) echo 'style="pointer-events: none; opacity: 0.6;"'; ?>>
+                                <a href="add_product.php" class="btn btn-primary mb-4" <?php if ($canadd == 0) echo 'style="pointer-events: none; opacity: 0.6;"'; ?>>
                                     <i class="fas fa-plus me-2"></i> Add New Product
                                 </a>
 
@@ -113,18 +129,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['product_name']) && $p
                                                 // Edit Button
                                                 echo "<form method='POST' action='edit_product.php?id={$row['product_id']}' style='display:inline-block;' onsubmit='return submitForm(this);'>";
                                                 echo "<input type='hidden' name='product_id' value='" . htmlspecialchars($row['product_id']) . "'>";
-                                                echo "<button type='submit' class='btn btn-success btn-sm action-button' " . ($permissions['canedit'] == 0 ? 'style="pointer-events: none; opacity: 0.6;"' : '') . ">
+                                                echo "<button type='submit' class='btn btn-success btn-sm action-button' " . ($canedit == 0 ? 'style="pointer-events: none; opacity: 0.6;"' : '') . ">
                                                         <i class='mdi mdi-pencil d-block font-size-16'></i>
                                                       </button>";
                                                 echo "</form>";
 
                                                 // Delete Button with SweetAlert
-                                                echo "<button type='button' class='btn btn-danger btn-sm action-button sa-warning' data-id='" . htmlspecialchars($row['product_id']) . "' " . ($permissions['candelete'] == 0 ? 'disabled' : '') . ">
+                                                echo "<button type='button' class='btn btn-danger btn-sm action-button sa-warning' data-id='" . htmlspecialchars($row['product_id']) . "' " . ($candelete == 0 ? 'disabled' : '') . ">
                                                         <i class='mdi mdi-trash-can d-block font-size-16'></i>
                                                       </button>";
 
                                                 // Restock Button with SweetAlert
-                                                echo "<button type='button' class='btn btn-info btn-sm action-button sa-restock' data-id='" . htmlspecialchars($row['product_id']) . "' " . ($permissions['canedit'] == 0 ? 'disabled' : '') . ">
+                                                echo "<button type='button' class='btn btn-info btn-sm action-button sa-restock' data-id='" . htmlspecialchars($row['product_id']) . "' " . ($canedit == 0 ? 'disabled' : '') . ">
                                                         <i class='mdi mdi-plus-box d-block font-size-16'></i>
                                                       </button>";
 
