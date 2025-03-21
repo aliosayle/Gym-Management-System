@@ -13,18 +13,6 @@ if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
-// Check if the user has permission to confirm payments
-$user_id = $_SESSION['id']; // Assuming user_id is stored in session
-$permission_query = "SELECT canedit FROM users WHERE id = :id";
-$permission_stmt = $pdo->prepare($permission_query);
-$permission_stmt->execute(['id' => $user_id]);
-$permissions = $permission_stmt->fetch();
-
-if ($permissions['canedit'] == 0) {
-    echo "<script>alert('You do not have permission to confirm payments.'); window.location.href = 'clients.php';</script>";
-    exit;
-}
-
 // Get the payment ID from the query parameter
 $payment_id = isset($_GET['id']) ? $_GET['id'] : null;
 
