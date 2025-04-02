@@ -1,68 +1,149 @@
 <?php
+// Enable error reporting for debugging
 error_reporting(E_ALL);
 ini_set('display_errors', 1);
 
+// Include necessary files
+include 'layouts/session.php';
 include 'layouts/config.php';
 
+// Set content type to JSON
 header('Content-Type: application/json');
 
-if (!$pdo) {
-    echo json_encode(['status' => 'error', 'message' => 'Connection not established: ' . $pdo->errorInfo()]);
+// Check if user is logged in
+if (!isset($_SESSION['id'])) {
+    echo json_encode([
+        'success' => false,
+        'message' => 'Unauthorized access'
+    ]);
     exit;
 }
 
-if (isset($_GET['id'])) {
-    $client_id = $_GET['id'];
-    $package_id = null;
+// Check if client ID is provided
+if (!isset($_GET['id'])) {
+    echo json_encode([
+        'success' => false,
+        'message' => 'Client ID is required'
+    ]);
+    exit;
+}
 
-    // Fetch package_id
-    $package_id_sql = "SELECT package_id FROM clients WHERE client_id = :client_id";
-    $stmt = $pdo->prepare($package_id_sql);
-    $stmt->execute(['client_id' => $client_id]);
-    $package_id = $stmt->fetchColumn();
+$client_id = $_GET['id'];
+$package_id = $_GET['package'] ?? null;
 
-    if ($package_id === false) {
-        http_response_code(400);
-        echo json_encode(['status' => 'error', 'message' => 'Invalid client ID']);
-        exit;
+if (empty($package_id)) {
+    echo json_encode([
+        'success' => false,
+        'message' => 'Package ID is required'
+    ]);
+    exit;
+}
+
+try {
+    // Begin transaction
+    $pdo->beginTransaction();
+    
+    // Get package details
+    $package_query = "SELECT * FROM packages WHERE id = :package_id";
+    $package_stmt = $pdo->prepare($package_query);
+    $package_stmt->execute(['package_id' => $package_id]);
+    $package = $package_stmt->fetch(PDO::FETCH_ASSOC);
+    
+    if (!$package) {
+        throw new Exception('Package not found');
     }
-
+    
+    // Calculate total amount and expiry date
+    $amount = $package['price'];
+    $days = $package['number_of_days'];
+    
+    // Get client current subscription end date
+    $client_query = "SELECT * FROM clients WHERE client_id = :client_id";
+    $client_stmt = $pdo->prepare($client_query);
+    $client_stmt->execute(['client_id' => $client_id]);
+    $client = $client_stmt->fetch(PDO::FETCH_ASSOC);
+    
+    if (!$client) {
+        throw new Exception('Client not found');
+    }
+    
+    // Calculate new subscription end date
+    $current_date = new DateTime();
+    $end_date = null;
+    
+    // If current subscription is active and end date is in the future, extend from there
+    if ($client['subscription_status'] == 'active' && 
+        !empty($client['subscription_end_date']) && 
+        new DateTime($client['subscription_end_date']) > $current_date) {
+        $end_date = new DateTime($client['subscription_end_date']);
+    } else {
+        // Otherwise start from today
+        $end_date = $current_date;
+    }
+    
+    // Add days to the end date
+    $end_date->add(new DateInterval("P{$days}D"));
+    $new_end_date = $end_date->format('Y-m-d');
+    
+    // Generate payment ID
     $payment_id = uniqid();
-    $amount = null;
-
-    // Get the package price
-    $package_price_sql = "SELECT price FROM packages WHERE id = :package_id";
-    $stmt = $pdo->prepare($package_price_sql);
-    $stmt->execute(['package_id' => $package_id]);
-    $amount = $stmt->fetchColumn();
-
-    if ($amount === false) {
-        http_response_code(400);
-        echo json_encode(['status' => 'error', 'message' => 'Invalid package ID']);
-        exit;
-    }
-
-    $payment_method = 'cash';
-    $payment_status = 'Pending';
-
-    // Insert new payment
-    $insert_payment_sql = "INSERT INTO payments (payment_id, client_id, amount, payment_method, package_id, payment_status) VALUES (:payment_id, :client_id, :amount, :payment_method, :package_id, :payment_status)";
-    $stmt = $pdo->prepare($insert_payment_sql);
-    if ($stmt->execute([
+    
+    // Update client subscription
+    $update_client_sql = "UPDATE clients SET 
+                         subscription_status = 'active', 
+                         subscription_end_date = :end_date,
+                         package_id = :package_id
+                         WHERE client_id = :client_id";
+    $update_client_stmt = $pdo->prepare($update_client_sql);
+    $update_client_stmt->execute([
+        'end_date' => $new_end_date,
+        'package_id' => $package_id,
+        'client_id' => $client_id
+    ]);
+    
+    // Insert new payment record
+    $insert_payment_sql = "INSERT INTO payments 
+                         (payment_id, client_id, amount, payment_method, package_id, payment_status) 
+                         VALUES 
+                         (:payment_id, :client_id, :amount, 'cash', :package_id, 'Pending')";
+    $insert_payment_stmt = $pdo->prepare($insert_payment_sql);
+    $insert_payment_stmt->execute([
         'payment_id' => $payment_id,
         'client_id' => $client_id,
         'amount' => $amount,
-        'payment_method' => $payment_method,
-        'package_id' => $package_id,
-        'payment_status' => $payment_status
-    ])) {
-        echo json_encode(['status' => 'success', 'payment_id' => $payment_id, 'amount' => $amount]);
-    } else {
-        http_response_code(500);
-        echo json_encode(['status' => 'error', 'message' => 'Failed to execute insert statement: ' . implode(", ", $stmt->errorInfo())]);
+        'package_id' => $package_id
+    ]);
+    
+    // Commit transaction
+    $pdo->commit();
+    
+    // Update dashboard data
+    $ch = curl_init();
+    curl_setopt($ch, CURLOPT_URL, 'ajax/update_dashboard_data.php');
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_exec($ch);
+    curl_close($ch);
+    
+    // Return success
+    echo json_encode([
+        'success' => true,
+        'message' => 'Subscription renewed successfully',
+        'client_id' => $client_id,
+        'payment_id' => $payment_id,
+        'amount' => $amount,
+        'new_end_date' => $new_end_date
+    ]);
+    
+} catch (Exception $e) {
+    // Rollback transaction on error
+    if ($pdo->inTransaction()) {
+        $pdo->rollBack();
     }
-} else {
-    http_response_code(400);
-    echo json_encode(['status' => 'error', 'message' => 'Invalid parameters']);
+    
+    // Return error message
+    echo json_encode([
+        'success' => false,
+        'message' => 'Error: ' . $e->getMessage()
+    ]);
 }
 ?>

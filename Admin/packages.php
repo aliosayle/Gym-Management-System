@@ -10,22 +10,13 @@ if (!$pdo) {
     die("Connection not established: " . $pdo->errorInfo());
 }
 
-
-if (isset($_SESSION['delete_message'])) {
-    $alert_type = strpos($_SESSION['delete_message'], 'successfully') !== false ? 'success' : 'danger';
-    echo "<div class='alert alert-$alert_type alert-dismissible fade show' role='alert'>" . htmlspecialchars($_SESSION['delete_message']) . "<button type='button' class='btn-close' data-bs-dismiss='alert' aria-label='Close'></button></div>";
-    unset($_SESSION['delete_message']); // Unset after displaying the message
-}
-
-
-// Fetch user permissions
-
-$user_id = isset($_SESSION['id']) ? $_SESSION['id'] : null; // Ensure user_id is set
-
+// Get user's assigned branches
+$user_id = isset($_SESSION['id']) ? $_SESSION['id'] : null;
 if ($user_id === null) {
     die("User ID is not set in the session.");
 }
 
+// Get user permissions
 $permission_query = "SELECT canedit, candelete, canadd, isadmin FROM users WHERE id = :id";
 $permission_stmt = $pdo->prepare($permission_query);
 $permission_stmt->execute(['id' => $user_id]);
@@ -36,25 +27,95 @@ if ($permissions === false) {
     die("No permissions found for the given user.");
 }
 
-// Ensure permissions are set to 0 or 1 (as boolean values)
-// $canedit = (int) $permissions['canedit']; // Cast to integer (either 0 or 1)
-// $candelete = (int) $permissions['candelete']; // Cast to integer (either 0 or 1)
-// $canadd = (int) $permissions['canadd']; // Cast to integer (either 0 or 1)
-// $isadmin = isset($permissions['isadmin']) ? (int) $permissions['isadmin'] : 0; // Cast to integer (either 0 or 1)
+// Get user's assigned branches
+$branches_query = "SELECT b.* FROM branches b 
+                   JOIN user_branches ub ON b.id = ub.branch_id 
+                   WHERE ub.user_id = :user_id";
+$branches_stmt = $pdo->prepare($branches_query);
+$branches_stmt->execute(['user_id' => $user_id]);
+$user_branches = $branches_stmt->fetchAll(PDO::FETCH_ASSOC);
+
+// If user is admin but has no branches assigned, get all branches
+if ($permissions['isadmin'] == 1 && empty($user_branches)) {
+    $branches_query = "SELECT * FROM branches";
+    $branches_stmt = $pdo->prepare($branches_query);
+    $branches_stmt->execute();
+    $user_branches = $branches_stmt->fetchAll(PDO::FETCH_ASSOC);
+}
+
+// If there are no branches at all, create a default one
+if (empty($user_branches)) {
+    try {
+        $pdo->beginTransaction();
+        
+        // Check if any branches exist
+        $check_branches = "SELECT COUNT(*) FROM branches";
+        $check_stmt = $pdo->prepare($check_branches);
+        $check_stmt->execute();
+        $branch_count = $check_stmt->fetchColumn();
+        
+        if ($branch_count == 0) {
+            // Create default branch
+            $create_branch = "INSERT INTO branches (id, company_id, manager) VALUES (1, 1, 'Default Manager')";
+            $pdo->exec($create_branch);
+            
+            // Assign user to this branch
+            $assign_branch = "INSERT INTO user_branches (user_id, branch_id, assigned_by) VALUES (:user_id, 1, :user_id)";
+            $assign_stmt = $pdo->prepare($assign_branch);
+            $assign_stmt->execute(['user_id' => $user_id]);
+            
+            $pdo->commit();
+            
+            // Refresh the branches list
+            $branches_query = "SELECT * FROM branches WHERE id = 1";
+            $branches_stmt = $pdo->prepare($branches_query);
+            $branches_stmt->execute();
+            $user_branches = $branches_stmt->fetchAll(PDO::FETCH_ASSOC);
+        }
+    } catch (Exception $e) {
+        $pdo->rollBack();
+        die("Error creating default branch: " . $e->getMessage());
+    }
+}
+
+// Get the selected branch (from POST, GET, or default to the first branch)
+$selected_branch_id = null;
+
+if (isset($_POST['branch_id'])) {
+    $selected_branch_id = $_POST['branch_id'];
+} elseif (isset($_GET['branch_id'])) {
+    $selected_branch_id = $_GET['branch_id'];
+} elseif (!empty($user_branches)) {
+    $selected_branch_id = $user_branches[0]['id'];
+}
+
+if (isset($_SESSION['delete_message'])) {
+    $alert_type = strpos($_SESSION['delete_message'], 'successfully') !== false ? 'success' : 'danger';
+    echo "<div class='alert alert-$alert_type alert-dismissible fade show' role='alert'>" . htmlspecialchars($_SESSION['delete_message']) . "<button type='button' class='btn-close' data-bs-dismiss='alert' aria-label='Close'></button></div>";
+    unset($_SESSION['delete_message']); // Unset after displaying the message
+}
 
 // Protect POST actions with permission checks
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['package_name']) && $permissions['canadd'] == 1) {
     $package_name = $_POST['package_name'];
     $price = $_POST['price'];
     $number_of_days = (int)$_POST['number_of_days'];
-    $insert_query = "INSERT INTO packages (name, price, number_of_days) VALUES (:package_name, :price, :number_of_days)";
+    $branch_id = $selected_branch_id; // Use the selected branch
+    
+    $insert_query = "INSERT INTO packages (name, price, number_of_days, branch_id) 
+                     VALUES (:package_name, :price, :number_of_days, :branch_id)";
     $insert_stmt = $pdo->prepare($insert_query);
-    if ($insert_stmt->execute(['package_name' => $package_name, 'price' => $price, 'number_of_days' => $number_of_days])) {
+    if ($insert_stmt->execute([
+        'package_name' => $package_name, 
+        'price' => $price, 
+        'number_of_days' => $number_of_days,
+        'branch_id' => $branch_id
+    ])) {
         echo "<script>alert('New package added successfully');</script>";
     } else {
         echo "<script>alert('Error adding package: " . implode(", ", $insert_stmt->errorInfo()) . "');</script>";
     }
-} elseif ($_SERVER['REQUEST_METHOD'] === 'POST') {
+} elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['package_name'])) {
     echo "<script>alert('You do not have permission to add packages.');</script>";
 }
 ?>
@@ -89,22 +150,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['package_name']) && $p
                                 <li class="breadcrumb-item active" aria-current="page">Packages</li>
                             </ol>
                         </nav>
+                        
                         <div class="card">
                             <div class="card-header d-flex justify-content-between align-items-center">
                                 <h4 class="card-title">Packages Table</h4>
                             </div>
                             <div class="card-body">
                                 <form method="POST" action="add_package.php" class="mb-4">
-                                    <?php                                         $permission_query = "SELECT canedit, candelete, canadd, isadmin FROM users WHERE id = :id";
-                                        $permission_stmt = $pdo->prepare($permission_query);
-                                        $permission_stmt->execute(['id' => $user_id]);
-                                        $permissions = $permission_stmt->fetch(PDO::FETCH_ASSOC);
-                                        
-                                        // Check if $permissions is false (no user found)
-                                        if ($permissions === false) {
-                                            die("No permissions found for the given user.");
-                                        }
-                                        ?>
+                                    <input type="hidden" name="branch_id" value="<?php echo $selected_branch_id; ?>">
                                     <button type="submit" class="btn btn-primary" <?php if ($permissions['canadd'] == 0) echo 'style="pointer-events: none; opacity: 0.6;"'; ?>>
                                         <i class="fas fa-plus me-2"></i> Add New Package
                                     </button>
@@ -121,17 +174,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['package_name']) && $p
                                     </thead>
                                     <tbody>
                                         <?php 
-                                        $user_id = isset($_SESSION['id']) ? $_SESSION['id'] : null; // Ensure user_id is set
-
-                                        if ($user_id === null) {
-                                            die("User ID is not set in the session.");
-                                        }
-                                        
-
-                                        $query = "SELECT * FROM packages";
+                                        // Get packages for the selected branch
+                                        $query = "SELECT * FROM packages WHERE branch_id = :branch_id";
                                         $stmt = $pdo->prepare($query);
-                                        $stmt->execute();
+                                        $stmt->execute(['branch_id' => $selected_branch_id]);
                                         $result = $stmt->fetchAll(PDO::FETCH_ASSOC);
+                                        
                                         if ($result) {
                                             foreach ($result as $row) {
                                                 echo "<tr>";
@@ -143,6 +191,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['package_name']) && $p
                                                 // Edit Button
                                                 echo "<form method='POST' action='edit_package.php?id={$row['id']}' style='display:inline-block;' onsubmit='return submitForm(this);'>";
                                                 echo "<input type='hidden' name='package_id' value='" . htmlspecialchars($row['id']) . "'>";
+                                                echo "<input type='hidden' name='branch_id' value='" . $selected_branch_id . "'>";
                                                 echo "<button type='submit' class='btn btn-success btn-sm action-button' " . ($permissions['canedit'] == 0 ? 'style="pointer-events: none; opacity: 0.6;"' : '') . ">
                                                         <i class='mdi mdi-pencil d-block font-size-16'></i>
                                                       </button>";
@@ -157,7 +206,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['package_name']) && $p
                                                 echo "</tr>";
                                             }
                                         } else {
-                                            echo "<tr><td colspan='4'>No data found</td></tr>";
+                                            echo "<tr><td colspan='4'>No packages found for this branch</td></tr>";
                                         }
                                         ?>
                                     </tbody>
@@ -187,10 +236,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['package_name']) && $p
 <script src="assets/libs/datatables.net-buttons/js/buttons.print.min.js"></script>
 <script src="assets/libs/datatables.net-responsive/js/dataTables.responsive.min.js"></script>
 <script src="assets/libs/datatables.net-responsive-bs4/js/responsive.bootstrap4.min.js"></script>
-<script src="assets/libs/apexcharts/apexcharts.min.js"></script>
-<script src="assets/libs/admin-resources/jquery.vectormap/jquery-jvectormap-1.2.2.min.js"></script>
-<script src="assets/libs/admin-resources/jquery.vectormap/maps/jquery-jvectormap-world-mill-en.js"></script>
-<script src="assets/js/pages/dashboard.init.js"></script>
 <script src="assets/js/app.js"></script>
 <script>
     function submitForm(form) {
@@ -216,6 +261,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['package_name']) && $p
         // SweetAlert for delete button
         $('.sa-warning').on('click', function () {
             var packageId = $(this).data('id');
+            var branchId = <?php echo $selected_branch_id; ?>;
             Swal.fire({
                 title: 'Are you sure?',
                 text: "You won't be able to revert this!",
@@ -226,7 +272,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['package_name']) && $p
                 confirmButtonText: 'Yes, delete it!'
             }).then((result) => {
                 if (result.isConfirmed) {
-                    window.location.href = 'delete_package.php?id=' + packageId;
+                    window.location.href = 'delete_package.php?id=' + packageId + '&branch_id=' + branchId;
                 }
             })
         });

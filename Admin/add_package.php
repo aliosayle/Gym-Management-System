@@ -10,21 +10,51 @@ if (session_status() === PHP_SESSION_NONE) {
 error_reporting(E_ALL);
 ini_set('display_errors', 1);
 
+// Get branch ID (either from POST or GET)
+$branch_id = isset($_POST['branch_id']) ? $_POST['branch_id'] : 
+             (isset($_GET['branch_id']) ? $_GET['branch_id'] : 1); // Default to branch 1 if not specified
+
+// Get user's assigned branches for dropdown
+$user_id = $_SESSION['id'];
+$branches_query = "SELECT b.* FROM branches b 
+                  JOIN user_branches ub ON b.id = ub.branch_id 
+                  WHERE ub.user_id = :user_id";
+$branches_stmt = $pdo->prepare($branches_query);
+$branches_stmt->execute(['user_id' => $user_id]);
+$user_branches = $branches_stmt->fetchAll(PDO::FETCH_ASSOC);
+
+// If admin with no branches assigned, get all branches
+$isadmin_query = "SELECT isadmin FROM users WHERE id = :id";
+$isadmin_stmt = $pdo->prepare($isadmin_query);
+$isadmin_stmt->execute(['id' => $user_id]);
+$is_admin = $isadmin_stmt->fetchColumn();
+
+if ($is_admin && empty($user_branches)) {
+    $branches_query = "SELECT * FROM branches";
+    $branches_stmt = $pdo->prepare($branches_query);
+    $branches_stmt->execute();
+    $user_branches = $branches_stmt->fetchAll(PDO::FETCH_ASSOC);
+}
+
 // Handle form submission for inserting new package
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['form_submitted'])) {
     $name = $_POST['name'];
     $price = $_POST['price'];
     $number_of_days = (int)$_POST['number_of_days'];
+    $package_branch_id = $_POST['branch_id'];
 
-    $insert_sql = "INSERT INTO packages (name, price, number_of_days) VALUES (:name, :price, :number_of_days)";
+    $insert_sql = "INSERT INTO packages (name, price, number_of_days, branch_id) 
+                  VALUES (:name, :price, :number_of_days, :branch_id)";
     $stmt = $pdo->prepare($insert_sql);
     $stmt->execute([
         'name' => $name,
         'price' => $price,
-        'number_of_days' => $number_of_days
+        'number_of_days' => $number_of_days,
+        'branch_id' => $package_branch_id
     ]);
 
-    header("Location: packages.php");
+    // Redirect back to packages page for the same branch
+    header("Location: packages.php?branch_id=" . $package_branch_id);
     exit;
 }
 ?>
@@ -79,6 +109,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['form_submitted'])) {
                                     <div class="row">
                                         <div class="col-lg-6">
                                             <input type="hidden" name="form_submitted" value="1">
+                                            <input type="hidden" name="branch_id" value="<?php echo $branch_id; ?>">
 
                                             <div class="mb-3">
                                                 <label for="name" class="form-label">Name</label>
@@ -123,7 +154,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['form_submitted'])) {
 <script>
     $(document).ready(function () {
         $('.select2').select2({
-            placeholder: "Select a site",
+            placeholder: "Select a branch",
             allowClear: true
         });                         
     });

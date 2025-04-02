@@ -10,13 +10,40 @@ if (session_status() === PHP_SESSION_NONE) {
 error_reporting(E_ALL);
 ini_set('display_errors', 1);
 
+// Get branch ID from the request
+$branch_id = isset($_POST['branch_id']) ? intval($_POST['branch_id']) : 
+             (isset($_GET['branch_id']) ? intval($_GET['branch_id']) : 1);
+
+// Get user's assigned branches for dropdown
+$user_id = $_SESSION['id'];
+$branches_query = "SELECT b.* FROM branches b 
+                  JOIN user_branches ub ON b.id = ub.branch_id 
+                  WHERE ub.user_id = :user_id";
+$branches_stmt = $pdo->prepare($branches_query);
+$branches_stmt->execute(['user_id' => $user_id]);
+$user_branches = $branches_stmt->fetchAll(PDO::FETCH_ASSOC);
+
+// If admin with no branches assigned, get all branches
+$isadmin_query = "SELECT isadmin FROM users WHERE id = :id";
+$isadmin_stmt = $pdo->prepare($isadmin_query);
+$isadmin_stmt->execute(['id' => $user_id]);
+$is_admin = $isadmin_stmt->fetchColumn();
+
+if ($is_admin && empty($user_branches)) {
+    $branches_query = "SELECT * FROM branches";
+    $branches_stmt = $pdo->prepare($branches_query);
+    $branches_stmt->execute();
+    $user_branches = $branches_stmt->fetchAll(PDO::FETCH_ASSOC);
+}
+
 // Handle form submission for inserting new client
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['form_submitted'])) {
     $name = $_POST['name'];
     $phone_number = $_POST['phone_number'];
-    $subscription_status = $_POST['subscription_status'];
+    $subscription_status = 'active';
     $package_id = $_POST['package_id'];
     $payment_id = uniqid();
+    $client_branch_id = $_POST['branch_id'];
     $amount = null;
 
     // Fetch package price
@@ -34,13 +61,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['form_submitted'])) {
 
         // Insert new client
         $client_id = bin2hex(random_bytes(16)); // Generate a 36-character UUID
-        $insert_client_sql = "INSERT INTO clients (client_id, name, phone_number, package_id) VALUES (:client_id, :name, :phone_number, :package_id)";
+        $insert_client_sql = "INSERT INTO clients (client_id, name, phone_number, package_id, branch_id, subscription_status) 
+                             VALUES (:client_id, :name, :phone_number, :package_id, :branch_id, :subscription_status)";
         $stmt = $pdo->prepare($insert_client_sql);
         $stmt->execute([
             'client_id' => $client_id,
             'name' => $name,
             'phone_number' => $phone_number,
-            'package_id' => $package_id
+            'package_id' => $package_id,
+            'branch_id' => $client_branch_id,
+            'subscription_status' => $subscription_status
         ]);
 
         // Insert new payment
@@ -63,7 +93,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['form_submitted'])) {
         throw $e;
     }
 
-    header("Location: clients.php");
+    // Redirect back to clients page for the same branch
+    header("Location: clients.php?branch_id=" . $client_branch_id);
     exit;
 }
 ?>
@@ -118,6 +149,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['form_submitted'])) {
                                     <div class="row">
                                         <div class="col-lg-6">
                                             <input type="hidden" name="form_submitted" value="1">
+                                            <input type="hidden" name="branch_id" value="<?php echo $branch_id; ?>">
 
                                             <div class="mb-3">
                                                 <label for="name" class="form-label">Name</label>
@@ -131,10 +163,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['form_submitted'])) {
                                                 <label for="package_id" class="form-label">Package</label>
                                                 <select class="form-control" name="package_id" id="package_id" required>
                                                     <?php
-                                                    // Fetch packages data
-                                                    $package_sql = "SELECT id, name FROM packages";
+                                                    // Fetch packages data for the selected branch
+                                                    $package_sql = "SELECT id, name FROM packages WHERE branch_id = :branch_id";
                                                     $stmt = $pdo->prepare($package_sql);
-                                                    $stmt->execute();
+                                                    $stmt->execute(['branch_id' => $branch_id]);
                                                     $packages = $stmt->fetchAll(PDO::FETCH_ASSOC);
                                                     foreach ($packages as $package) {
                                                         echo '<option value="' . htmlspecialchars($package['id']) . '">' . htmlspecialchars($package['name']) . '</option>';
@@ -174,9 +206,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['form_submitted'])) {
 <script>
     $(document).ready(function () {
         $('.select2').select2({
-            placeholder: "Select a site",
+            placeholder: "Select a package",
             allowClear: true
         });
+        
+        // Remove the branch change handler since we no longer have a branch dropdown
     });
 </script>
 

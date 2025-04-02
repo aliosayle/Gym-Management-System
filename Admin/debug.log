@@ -1,0 +1,122 @@
+2025-04-02 14:34:22 - Incoming POST request: Array
+(
+    [action] => get_permissions
+    [user_id] => 14
+)
+
+2025-04-02 14:34:34 - Incoming POST request: Array
+(
+    [action] => get_permissions
+    [user_id] => 14
+)
+
+2025-04-02 14:34:38 - Incoming POST request: Array
+(
+    [action] => get_user
+    [user_id] => 16
+)
+
+2025-04-02 14:35:12 - Incoming POST request: Array
+(
+    [action] => get_user_branches
+    [user_id] => 9
+)
+
+2025-04-02 14:35:12 - GET_BRANCHES: Starting getUserBranches function
+2025-04-02 14:35:12 - GET_BRANCHES: User ID: 9
+2025-04-02 14:35:12 - GET_BRANCHES - User Query: SELECT username FROM users WHERE id = :id
+2025-04-02 14:35:12 - GET_BRANCHES: User found: ali
+2025-04-02 14:35:12 - GET_BRANCHES: user_branches table exists: Yes
+2025-04-02 14:35:12 - GET_BRANCHES: 2 total branches in database
+2025-04-02 14:35:12 - GET_BRANCHES - All branches: Array
+(
+    [0] => Array
+        (
+            [id] => 1
+            [company_id] => 1
+            [name] => Main Branch
+            [address] => test branch
+            [phone] => 58464684
+            [email] => testmail@test.com
+            [manager] => Ali Osseili
+            [created_at] => 2025-04-02 08:35:27
+            [updated_at] => 2025-04-02 08:35:27
+        )
+
+    [1] => Array
+        (
+            [id] => 2
+            [company_id] => 2
+            [name] => test branch
+            [address] => test address
+            [phone] => test phone
+            [email] => test@email
+            [manager] => test manager
+            [created_at] => 2025-04-02 08:36:43
+            [updated_at] => 2025-04-02 08:36:43
+        )
+
+)
+
+2025-04-02 14:35:12 - GET_BRANCHES - SQL: SELECT branch_id FROM user_branches WHERE user_id = :user_id
+2025-04-02 14:35:12 - GET_BRANCHES: 2 branches assigned to this user
+2025-04-02 14:35:12 - GET_BRANCHES - User branches: Array
+(
+    [0] => 1
+    [1] => 2
+)
+
+2025-04-02 14:35:20 - Incoming POST request: Array
+(
+    [action] => get_user_branches
+    [user_id] => 14
+)
+
+2025-04-02 14:35:20 - GET_BRANCHES: Starting getUserBranches function
+2025-04-02 14:35:20 - GET_BRANCHES: User ID: 14
+2025-04-02 14:35:20 - GET_BRANCHES - User Query: SELECT username FROM users WHERE id = :id
+2025-04-02 14:35:20 - GET_BRANCHES: User found: desk
+2025-04-02 14:35:20 - GET_BRANCHES: user_branches table exists: Yes
+2025-04-02 14:35:20 - GET_BRANCHES: 2 total branches in database
+2025-04-02 14:35:20 - GET_BRANCHES - All branches: Array
+(
+    [0] => Array
+        (
+            [id] => 1
+            [company_id] => 1
+            [name] => Main Branch
+            [address] => test branch
+            [phone] => 58464684
+            [email] => testmail@test.com
+            [manager] => Ali Osseili
+            [created_at] => 2025-04-02 08:35:27
+            [updated_at] => 2025-04-02 08:35:27
+        )
+
+    [1] => Array
+        (
+            [id] => 2
+            [company_id] => 2
+            [name] => test branch
+            [address] => test address
+            [phone] => test phone
+            [email] => test@email
+            [manager] => test manager
+            [created_at] => 2025-04-02 08:36:43
+            [updated_at] => 2025-04-02 08:36:43
+        )
+
+)
+
+2025-04-02 14:35:20 - GET_BRANCHES - SQL: SELECT branch_id FROM user_branches WHERE user_id = :user_id
+2025-04-02 14:35:20 - GET_BRANCHES: 0 branches assigned to this user
+2025-04-02 14:35:20 - GET_BRANCHES - User branches: Array
+(
+)
+
+2025-04-02 14:42:15 - Incoming POST request: Array
+(
+    [action] => get_user
+    [user_id] => 16
+)
+

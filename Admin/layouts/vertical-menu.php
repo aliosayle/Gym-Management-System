@@ -49,7 +49,7 @@ $is_admin = $permissions['isadmin'];
 
         <div class="d-flex">
 
-            <div class="dropdown d-inline-block d-lg-none ms-2">
+            <div class="dropdown d-none d-lg-none ms-2">
                 <button type="button" class="btn header-item" id="page-header-search-dropdown"
                 data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
                     <i data-feather="search" class="icon-lg"></i>
@@ -69,31 +69,48 @@ $is_admin = $permissions['isadmin'];
                 </div>
             </div>
 
-            <div class="dropdown d-none d-sm-inline-block">
-            <button type="button" class="btn header-item waves-effect" data-bs-toggle="dropdown" aria-haspopup="true"
-                    aria-expanded="false">
-                    <?php if ($lang == 'en') { ?>
-                        <img class="me-2" src="assets/images/flags/us.jpg" alt="Header Language" height="16"> 
-                    <?php } ?>
-                    <?php if ($lang == 'fr') { ?>
-                        <img class="me-2" src="assets/images/flags/fr.jpg" alt="Header Language" height="16"> 
-                    <?php } ?>
+            <!-- Branch Selector -->
+            <?php
+            // Check if user is logged in and has a branch selected
+            if (isset($_SESSION['id'])) {
+                // Get user's assigned branches
+                $branches_query = "SELECT b.id, b.name, c.name as company_name 
+                                  FROM user_branches ub
+                                  JOIN branches b ON ub.branch_id = b.id
+                                  JOIN companies c ON b.company_id = c.id
+                                  WHERE ub.user_id = :user_id
+                                  ORDER BY c.name, b.name";
+                $branches_stmt = $pdo->prepare($branches_query);
+                $branches_stmt->execute(['user_id' => $_SESSION['id']]);
+                $user_branches = $branches_stmt->fetchAll(PDO::FETCH_ASSOC);
+                
+                // Only show branch selector if user has branches
+                if (count($user_branches) > 0) {
+                    // Get current branch name
+                    $current_branch_name = isset($_SESSION['selected_branch_name']) ? $_SESSION['selected_branch_name'] : 'Select Branch';
+                    ?>
+                    <div class="dropdown d-none d-sm-inline-block">
+                        <button type="button" class="btn header-item waves-effect" data-bs-toggle="dropdown" aria-haspopup="true"
+                                aria-expanded="false">
+                            <i class="mdi mdi-office-building me-1"></i> <?php echo htmlspecialchars($current_branch_name); ?>
+                        </button>
+                        <div class="dropdown-menu dropdown-menu-end">
+                            <?php foreach ($user_branches as $branch): ?>
+                                <a href="javascript:void(0);" 
+                                   class="dropdown-item branch-item <?php echo (isset($_SESSION['selected_branch_id']) && $_SESSION['selected_branch_id'] == $branch['id']) ? 'active' : ''; ?>"
+                                   data-branch-id="<?php echo $branch['id']; ?>"
+                                   data-branch-name="<?php echo htmlspecialchars($branch['name']); ?>">
+                                    <span class="align-middle"><?php echo htmlspecialchars($branch['company_name'] . ' - ' . $branch['name']); ?></span>
+                                </a>
+                            <?php endforeach; ?>
+                        </div>
+                    </div>
+                    <?php
+                }
+            }
+            ?>
 
-                </button>
-                <div class="dropdown-menu dropdown-menu-end">
-                    
-
-                    <!-- item-->
-                    <a href="?lang=en" class="dropdown-item notify-item language">
-                        <img src="assets/images/flags/us.jpg" alt="user-image" class="me-1" height="12"> <span class="align-middle"> English </span>
-                    </a>
-                    
-                    <!-- item-->
-                    <a href="?lang=fr" class="dropdown-item notify-item language">
-                        <img src="assets/images/flags/fr.jpg" alt="user-image" class="me-1" height="12"> <span class="align-middle"> French </span>
-                    </a>
-                </div>
-                <div class="dropdown d-none d-lg-inline-block ms-1">
+            <div class="dropdown d-none d-lg-inline-block ms-1">
     <button type="button" class="btn header-item" data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
         <i data-feather="grid" class="icon-lg"></i>
     </button>
@@ -155,6 +172,31 @@ $is_admin = $permissions['isadmin'];
         <div id="sidebar-menu">
             <!-- Left Menu Start -->
             <ul class="metismenu list-unstyled" id="side-menu">
+                <?php
+                // Define fallback language array if not defined
+                if (!isset($language)) {
+                    $language = [
+                        "Menu" => "Menu",
+                        "Dashboard" => "Dashboard",
+                        "Elements" => "Elements"
+                    ];
+                }
+                
+                // Check if user is admin
+                $is_admin = false;
+                if (isset($_SESSION['id'])) {
+                    try {
+                        $admin_query = "SELECT isadmin FROM users WHERE id = :id";
+                        $admin_stmt = $pdo->prepare($admin_query);
+                        $admin_stmt->execute(['id' => $_SESSION['id']]);
+                        $admin_result = $admin_stmt->fetch(PDO::FETCH_ASSOC);
+                        $is_admin = isset($admin_result['isadmin']) && $admin_result['isadmin'] == 1;
+                    } catch (Exception $e) {
+                        // Silently fail
+                    }
+                }
+                ?>
+                
                 <li class="menu-title" data-key="t-menu"><?php echo $language["Menu"]; ?></li>
 
                 <li>
@@ -183,7 +225,46 @@ $is_admin = $permissions['isadmin'];
                             <span data-key="t-components">Packages</span>
                         </a>
                     </li>
+                    <li>
+                        <a href="companies.php">
+                            <i data-feather="briefcase"></i>
+                            <span data-key="t-components">Companies & Branches</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="users.php">
+                            <i data-feather="users"></i>
+                            <span data-key="t-components">User Management</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="setup_subscription_cron.php">
+                            <i data-feather="clock"></i>
+                            <span data-key="t-components">Subscription Automation</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="setup_permissions.php">
+                            <i data-feather="shield"></i>
+                            <span data-key="t-components">Setup Permissions</span>
+                        </a>
+                    </li>
                 <?php } ?>
+
+                <!-- Point of Sale Section -->
+                <li>
+                    <a href="javascript: void(0);" class="has-arrow waves-effect">
+                        <i class="bx bx-cart-alt"></i>
+                        <span>Store & Inventory</span>
+                    </a>
+                    <ul class="sub-menu" aria-expanded="false">
+                        <li><a href="pos.php">Point of Sale</a></li>
+                        <?php if ($is_admin) { ?>
+                            <li><a href="inventory.php">Inventory Management</a></li>
+                            <li><a href="sales_report.php">Sales Reports</a></li>
+                        <?php } ?>
+                    </ul>
+                </li>
             </ul>
         </div>
         <!-- Sidebar -->
@@ -194,4 +275,55 @@ $is_admin = $permissions['isadmin'];
 <script src="https://unpkg.com/feather-icons"></script>
 <script>
     feather.replace();
+</script>
+
+<!-- Branch Selector Script -->
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Handle branch selection
+    var branchItems = document.querySelectorAll('.branch-item');
+    branchItems.forEach(function(item) {
+        item.addEventListener('click', function(e) {
+            e.preventDefault();
+            
+            var branchId = this.getAttribute('data-branch-id');
+            var branchName = this.getAttribute('data-branch-name');
+            
+            // Show loading indication
+            var originalText = this.innerHTML;
+            this.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span> Switching...';
+            
+            // Use AJAX to switch branch without page reload
+            var xhr = new XMLHttpRequest();
+            xhr.open('POST', 'ajax/select_branch.php', true);
+            xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+            xhr.onreadystatechange = function() {
+                if (xhr.readyState === 4) {
+                    if (xhr.status === 200) {
+                        try {
+                            var response = JSON.parse(xhr.responseText);
+                            if (response.status === 'success') {
+                                // Refresh the page to apply the new branch
+                                window.location.reload();
+                            } else {
+                                alert('Error: ' + response.message);
+                                // Reset the button text
+                                item.innerHTML = originalText;
+                            }
+                        } catch (e) {
+                            alert('Error parsing response: ' + e.message);
+                            // Reset the button text
+                            item.innerHTML = originalText;
+                        }
+                    } else {
+                        alert('Error: Server returned status ' + xhr.status);
+                        // Reset the button text
+                        item.innerHTML = originalText;
+                    }
+                }
+            };
+            xhr.send('branch_id=' + encodeURIComponent(branchId));
+        });
+    });
+});
 </script>

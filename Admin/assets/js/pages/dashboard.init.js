@@ -6,19 +6,25 @@ Contact: themesbrand@gmail.com
 File: Dashboard Init Js File
 */
 
-// get colors array from the string
+// Function to get chart colors from HTML element
 function getChartColorsArray(chartId) {
-    var colors = $(chartId).attr('data-colors');
-    var colors = JSON.parse(colors);
-    return colors.map(function(value){
-        var newValue = value.replace(' ', '');
-        if(newValue.indexOf('--') != -1) {
-            var color = getComputedStyle(document.documentElement).getPropertyValue(newValue);
-            if(color) return color;
-        } else {
-            return newValue;
-        }
-    })
+    if (!chartId) {
+        return ['#3b5de7','#45cb85','#eeb902']; // Return default colors if chartId not provided
+    }
+    
+    var colors = document.getElementById(chartId)?.getAttribute('data-colors');
+    
+    if (!colors) {
+        return ['#3b5de7','#45cb85','#eeb902']; // Return default colors if no colors found
+    }
+    
+    try {
+        colors = JSON.parse(colors.replace(/'/g, '"'));
+        return colors;
+    } catch (error) {
+        console.warn('Error parsing chart colors:', error);
+        return ['#3b5de7','#45cb85','#eeb902']; // Return default colors on error
+    }
 }
 
 //  MINI CHART
