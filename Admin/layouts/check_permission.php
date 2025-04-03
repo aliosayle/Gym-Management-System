@@ -27,18 +27,14 @@ function has_permission($permission_name, $pdo) {
     $user_id = $_SESSION['id'];
     
     // First check if user has a specific permission setting in user_permissions table
-    $permission_query = "SELECT permission_value FROM user_permissions 
-                        WHERE user_id = :user_id AND permission_name = :permission_name";
+    $permission_query = "SELECT $permission_name FROM user_permissions WHERE user_id = :user_id";
     $permission_stmt = $pdo->prepare($permission_query);
-    $permission_stmt->execute([
-        'user_id' => $user_id,
-        'permission_name' => $permission_name
-    ]);
+    $permission_stmt->execute(['user_id' => $user_id]);
     
     // If user has a specific permission setting, return that value (1 or 0)
     if ($permission_stmt->rowCount() > 0) {
         $permission = $permission_stmt->fetch(PDO::FETCH_ASSOC);
-        return (bool)$permission['permission_value'];
+        return isset($permission[$permission_name]) ? (bool)$permission[$permission_name] : false;
     }
     
     // If no specific permission found, check if user is admin
