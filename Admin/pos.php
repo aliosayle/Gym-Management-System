@@ -21,6 +21,46 @@ if (!isset($_SESSION['cart'])) {
     $_SESSION['cart'] = [];
 }
 
+// Get the selected branch
+$selected_branch_id = null;
+
+if (isset($_POST['branch_id'])) {
+    $selected_branch_id = $_POST['branch_id'];
+} elseif (isset($_GET['branch_id'])) {
+    $selected_branch_id = $_GET['branch_id'];
+} elseif (isset($_SESSION['selected_branch_id'])) {
+    $selected_branch_id = $_SESSION['selected_branch_id'];
+} elseif (isset($user_branches) && !empty($user_branches)) {
+    $selected_branch_id = $user_branches[0]['id'];
+}
+
+// Ensure we have a valid branch ID
+if (empty($selected_branch_id) && isset($user_branches) && !empty($user_branches)) {
+    $selected_branch_id = $user_branches[0]['id'];
+} elseif (empty($selected_branch_id)) {
+    $selected_branch_id = 1; // Default to branch ID 1 if nothing else is available
+}
+
+// Store selected branch in session
+$_SESSION['selected_branch_id'] = $selected_branch_id;
+
+// Get branch name for display
+$branch_name = "";
+if (!empty($selected_branch_id)) {
+    try {
+        $branch_query = "SELECT name FROM branches WHERE id = ?";
+        $branch_stmt = $pdo->prepare($branch_query);
+        $branch_stmt->execute([$selected_branch_id]);
+        $branch = $branch_stmt->fetch(PDO::FETCH_ASSOC);
+        if ($branch) {
+            $branch_name = $branch['name'];
+            $_SESSION['selected_branch_name'] = $branch_name;
+        }
+    } catch (PDOException $e) {
+        error_log("Error fetching branch name: " . $e->getMessage());
+    }
+}
+
 // Display flash messages
 if (isset($_SESSION['pos_message'])) {
     $alert_type = strpos($_SESSION['pos_message'], 'successfully') !== false ? 'success' : 'danger';
@@ -28,15 +68,16 @@ if (isset($_SESSION['pos_message'])) {
     unset($_SESSION['pos_message']); // Unset after displaying the message
 }
 
-// Fetch products from the products table
+// Fetch products from the products table filtered by branch_id
 $products = [];
 try {
     $query = "SELECT product_id, name, description, price, quantity_in_stock as quantity 
               FROM products 
+              WHERE branch_id = :branch_id
               ORDER BY name ASC";
-$stmt = $pdo->prepare($query);
-$stmt->execute();
-$products = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    $stmt = $pdo->prepare($query);
+    $stmt->execute(['branch_id' => $selected_branch_id]);
+    $products = $stmt->fetchAll(PDO::FETCH_ASSOC);
 } catch (PDOException $e) {
     error_log("Error fetching products: " . $e->getMessage());
 }
@@ -264,25 +305,32 @@ if (!empty($_SESSION['cart'])) {
         <div class="main-content">
             <div class="page-content">
                 <div class="container-fluid">
-                    <!-- Breadcrumb -->
+                    <!-- ========== Start Page Title ========== -->
                     <div class="row">
                         <div class="col-12">
                             <div class="page-title-box d-sm-flex align-items-center justify-content-between">
-                                <h4 class="mb-sm-0 font-size-18">Point of Sale</h4>
+                                <h4 class="mb-sm-0 font-size-18">
+                                    POS System
+                                    <?php if (!empty($branch_name)): ?>
+                                        - <?php echo htmlspecialchars($branch_name); ?>
+                                    <?php endif; ?>
+                                </h4>
+
                                 <div class="page-title-right">
                                     <ol class="breadcrumb m-0">
-                                        <li class="breadcrumb-item"><a href="index.php">Home</a></li>
-                                        <li class="breadcrumb-item active">POS</li>
+                                        <li class="breadcrumb-item"><a href="javascript: void(0);">Point of Sale</a></li>
+                                        <li class="breadcrumb-item active">POS System</li>
                                     </ol>
                                 </div>
                             </div>
                         </div>
                     </div>
+                    <!-- ========== End Page Title ========== -->
 
                     <!-- Alert area for messages -->
                     <div id="alert-container"></div>
 
-                    <!-- Main POS interface -->
+                    <!-- POS Container -->
                     <div class="pos-container">
                         <!-- Product selection section -->
                         <div class="card pos-products">

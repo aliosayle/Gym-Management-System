@@ -32,6 +32,8 @@ if (!$permissions || $permissions['candelete'] != 1) {
 
 if (isset($_GET['id'])) {
     $product_id = $_GET['id'];
+    $branch_id = isset($_GET['branch_id']) ? intval($_GET['branch_id']) : 
+                (isset($_SESSION['selected_branch_id']) ? intval($_SESSION['selected_branch_id']) : 1);
 
     $delete_query = "DELETE FROM products WHERE product_id = :product_id";
     $delete_stmt = $pdo->prepare($delete_query);
@@ -40,11 +42,15 @@ if (isset($_GET['id'])) {
     } else {
         $_SESSION['delete_message'] = "Error deleting product: " . implode(", ", $delete_stmt->errorInfo());
     }
-    header("Location: products.php");
+    header("Location: products.php?branch_id=" . $branch_id);
     exit();
 } else {
     $_SESSION['delete_message'] = "Invalid product ID";
-    header("Location: products.php");
+    
+    $branch_id = isset($_GET['branch_id']) ? intval($_GET['branch_id']) : 
+                (isset($_SESSION['selected_branch_id']) ? intval($_SESSION['selected_branch_id']) : 1);
+                
+    header("Location: products.php?branch_id=" . $branch_id);
     exit();
 }
 ?>

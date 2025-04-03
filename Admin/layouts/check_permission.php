@@ -14,37 +14,41 @@ if (!isset($pdo)) {
 }
 
 /**
- * Check if user has the specified permission
- * 
- * @param string $permission The permission to check
- * @param PDO $pdo The database connection
- * @return bool True if user has the permission, false otherwise
+ * Check if user has a specific permission
+ * @param string $permission_name The name of the permission to check
+ * @param object $pdo PDO database connection object
+ * @return bool True if user has permission, false otherwise
  */
-function has_permission($permission, $pdo) {
-    // If not logged in, no permissions
+function has_permission($permission_name, $pdo) {
     if (!isset($_SESSION['id'])) {
         return false;
     }
-    
+
     $user_id = $_SESSION['id'];
     
-    // Admin users have all permissions
-    $admin_query = "SELECT isadmin FROM users WHERE id = :id";
-    $admin_stmt = $pdo->prepare($admin_query);
-    $admin_stmt->execute(['id' => $user_id]);
-    $user = $admin_stmt->fetch(PDO::FETCH_ASSOC);
+    // First check if user has a specific permission setting in user_permissions table
+    $permission_query = "SELECT permission_value FROM user_permissions 
+                        WHERE user_id = :user_id AND permission_name = :permission_name";
+    $permission_stmt = $pdo->prepare($permission_query);
+    $permission_stmt->execute([
+        'user_id' => $user_id,
+        'permission_name' => $permission_name
+    ]);
     
-    if (isset($user['isadmin']) && $user['isadmin'] == 1) {
-        return true;
+    // If user has a specific permission setting, return that value (1 or 0)
+    if ($permission_stmt->rowCount() > 0) {
+        $permission = $permission_stmt->fetch(PDO::FETCH_ASSOC);
+        return (bool)$permission['permission_value'];
     }
     
-    // Check specific permission for non-admin users
-    $query = "SELECT $permission FROM user_permissions WHERE user_id = :user_id";
-    $stmt = $pdo->prepare($query);
-    $stmt->execute(['user_id' => $user_id]);
-    $result = $stmt->fetch(PDO::FETCH_ASSOC);
+    // If no specific permission found, check if user is admin
+    $user_query = "SELECT isadmin FROM users WHERE id = :id";
+    $user_stmt = $pdo->prepare($user_query);
+    $user_stmt->execute(['id' => $user_id]);
+    $user = $user_stmt->fetch(PDO::FETCH_ASSOC);
     
-    return isset($result[$permission]) && $result[$permission] == 1;
+    // If user is admin, they have permission by default
+    return (bool)$user['isadmin'];
 }
 
 /**
@@ -64,70 +68,81 @@ function require_permission($permission, $pdo, $redirect_url = 'index.php') {
 }
 
 /**
- * Check if user has access to the specified branch
- * 
- * @param int $branch_id The branch ID to check
- * @param PDO $pdo The database connection
- * @return bool True if user has access to the branch, false otherwise
+ * Check if user has access to a specific branch
+ * @param int $branch_id The ID of the branch to check
+ * @param object $pdo PDO database connection object
+ * @return bool True if user has access to branch, false otherwise
  */
 function has_branch_access($branch_id, $pdo) {
-    // If not logged in, no access
     if (!isset($_SESSION['id'])) {
         return false;
     }
-    
+
     $user_id = $_SESSION['id'];
     
-    // Admin users have access to all branches
-    $admin_query = "SELECT isadmin FROM users WHERE id = :id";
-    $admin_stmt = $pdo->prepare($admin_query);
-    $admin_stmt->execute(['id' => $user_id]);
-    $user = $admin_stmt->fetch(PDO::FETCH_ASSOC);
+    // First check specific branch assignment in user_branches table
+    $branch_query = "SELECT * FROM user_branches WHERE user_id = :user_id AND branch_id = :branch_id";
+    $branch_stmt = $pdo->prepare($branch_query);
+    $branch_stmt->execute([
+        'user_id' => $user_id,
+        'branch_id' => $branch_id
+    ]);
     
-    if (isset($user['isadmin']) && $user['isadmin'] == 1) {
+    // If user is specifically assigned to this branch, grant access
+    if ($branch_stmt->rowCount() > 0) {
         return true;
     }
     
-    // Check branch access for non-admin users
-    $query = "SELECT COUNT(*) FROM user_branches WHERE user_id = :user_id AND branch_id = :branch_id";
-    $stmt = $pdo->prepare($query);
-    $stmt->execute(['user_id' => $user_id, 'branch_id' => $branch_id]);
-    $count = $stmt->fetchColumn();
+    // If no specific branch assignment found, check if user is admin
+    $user_query = "SELECT isadmin FROM users WHERE id = :id";
+    $user_stmt = $pdo->prepare($user_query);
+    $user_stmt->execute(['id' => $user_id]);
+    $user = $user_stmt->fetch(PDO::FETCH_ASSOC);
     
-    return $count > 0;
+    // If user is admin, they have access to all branches by default
+    return (bool)$user['isadmin'];
 }
 
 /**
- * Get all branches that the user has access to
- * 
- * @param PDO $pdo The database connection
- * @return array Array of branch IDs the user has access to
+ * Get a list of branches accessible by the current user
+ * @param object $pdo PDO database connection object
+ * @return array List of accessible branches
  */
 function get_accessible_branches($pdo) {
-    // If not logged in, no branches
     if (!isset($_SESSION['id'])) {
         return [];
     }
-    
+
     $user_id = $_SESSION['id'];
     
-    // Admin users have access to all branches
-    $admin_query = "SELECT isadmin FROM users WHERE id = :id";
-    $admin_stmt = $pdo->prepare($admin_query);
-    $admin_stmt->execute(['id' => $user_id]);
-    $user = $admin_stmt->fetch(PDO::FETCH_ASSOC);
+    // First check specific branch assignments in user_branches table
+    $branch_query = "SELECT b.* FROM user_branches ub 
+                     JOIN branches b ON ub.branch_id = b.id
+                     WHERE ub.user_id = :user_id
+                     ORDER BY b.name";
+    $branch_stmt = $pdo->prepare($branch_query);
+    $branch_stmt->execute(['user_id' => $user_id]);
+    $branches = $branch_stmt->fetchAll(PDO::FETCH_ASSOC);
     
-    if (isset($user['isadmin']) && $user['isadmin'] == 1) {
-        $all_branches_query = "SELECT id FROM branches";
-        $all_branches_stmt = $pdo->prepare($all_branches_query);
-        $all_branches_stmt->execute();
-        return $all_branches_stmt->fetchAll(PDO::FETCH_COLUMN);
+    // If user has specific branch assignments, return those
+    if (count($branches) > 0) {
+        return $branches;
     }
     
-    // Get assigned branches for non-admin users
-    $query = "SELECT branch_id FROM user_branches WHERE user_id = :user_id";
-    $stmt = $pdo->prepare($query);
-    $stmt->execute(['user_id' => $user_id]);
+    // If no specific branch assignments, check if user is admin
+    $user_query = "SELECT isadmin FROM users WHERE id = :id";
+    $user_stmt = $pdo->prepare($user_query);
+    $user_stmt->execute(['id' => $user_id]);
+    $user = $user_stmt->fetch(PDO::FETCH_ASSOC);
     
-    return $stmt->fetchAll(PDO::FETCH_COLUMN);
+    // If user is admin, they have access to all branches
+    if ((bool)$user['isadmin']) {
+        $all_branches_query = "SELECT * FROM branches ORDER BY name";
+        $all_branches_stmt = $pdo->prepare($all_branches_query);
+        $all_branches_stmt->execute();
+        return $all_branches_stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+    
+    // Default to empty array if no branches accessible
+    return [];
 } 

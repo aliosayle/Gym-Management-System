@@ -6,8 +6,8 @@ include 'layouts/session.php';
 include 'layouts/head-main.php';
 include 'layouts/config.php';
 
-if (!$link) {
-    die("Connection not established: " . mysqli_connect_error());
+if (!$pdo) {
+    die("Connection not established: " . $pdo->errorInfo());
 }
 
 if (session_status() === PHP_SESSION_NONE) {
@@ -16,41 +16,61 @@ if (session_status() === PHP_SESSION_NONE) {
 
 // Fetch user permissions
 $user_id = $_SESSION['id']; // Assuming user_id is stored in session
-$permission_query = "SELECT canedit FROM users WHERE id = '$user_id'";
-$permission_result = mysqli_query($link, $permission_query);
-$permissions = mysqli_fetch_assoc($permission_result);
+$permission_query = "SELECT canedit FROM users WHERE id = :user_id";
+$permission_stmt = $pdo->prepare($permission_query);
+$permission_stmt->execute(['user_id' => $user_id]);
+$permissions = $permission_stmt->fetch(PDO::FETCH_ASSOC);
 
 if ($permissions['canedit'] == 0) {
     echo "<script>alert('You do not have permission to edit clients.'); window.location.href = 'clients.php';</script>";
     exit;
 }
 
-$client_id = $_POST['client_id'] ?? null;
+// Get client ID from POST or GET
+$client_id = isset($_POST['client_id']) ? $_POST['client_id'] : (isset($_GET['id']) ? $_GET['id'] : null);
+
+// Get branch ID
+$branch_id = isset($_POST['branch_id']) ? $_POST['branch_id'] : (isset($_GET['branch_id']) ? $_GET['branch_id'] : null);
+
 if (!$client_id) {
     echo "<script>alert('No client ID provided.'); window.location.href = 'clients.php';</script>";
     exit;
 }
 
-$query = "SELECT * FROM clients WHERE client_id = '$client_id'";
-$result = mysqli_query($link, $query);
-if (!$result || mysqli_num_rows($result) == 0) {
+$query = "SELECT * FROM clients WHERE client_id = :client_id";
+$stmt = $pdo->prepare($query);
+$stmt->execute(['client_id' => $client_id]);
+if ($stmt->rowCount() == 0) {
     echo "<script>alert('Client not found.'); window.location.href = 'clients.php';</script>";
     exit;
 }
 
-$client = mysqli_fetch_assoc($result);
+$client = $stmt->fetch(PDO::FETCH_ASSOC);
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['form_submitted'])) {
-    $name = mysqli_real_escape_string($link, $_POST['name']);
-    $phone_number = mysqli_real_escape_string($link, $_POST['phone_number']);
-    $subscription_status = mysqli_real_escape_string($link, $_POST['subscription_status']);
-    $subscription_end_date = mysqli_real_escape_string($link, $_POST['subscription_end_date']);
+    $name = $_POST['name'];
+    $phone_number = $_POST['phone_number'];
+    $subscription_status = $_POST['subscription_status'];
+    $subscription_end_date = $_POST['subscription_end_date'];
 
-    $update_query = "UPDATE clients SET name = '$name', phone_number = '$phone_number', subscription_status = '$subscription_status', subscription_end_date = '$subscription_end_date' WHERE client_id = '$client_id'";
-    if (mysqli_query($link, $update_query)) {
-        echo "<script>alert('Client updated successfully'); window.location.href = 'clients.php';</script>";
+    $update_query = "UPDATE clients SET name = :name, phone_number = :phone_number, 
+                     subscription_status = :subscription_status, 
+                     subscription_end_date = :subscription_end_date 
+                     WHERE client_id = :client_id";
+    $update_stmt = $pdo->prepare($update_query);
+    
+    $params = [
+        'name' => $name,
+        'phone_number' => $phone_number,
+        'subscription_status' => $subscription_status,
+        'subscription_end_date' => $subscription_end_date,
+        'client_id' => $client_id
+    ];
+    
+    if ($update_stmt->execute($params)) {
+        echo "<script>alert('Client updated successfully'); window.location.href = 'clients.php?branch_id=" . $branch_id . "';</script>";
     } else {
-        echo "<script>alert('Error updating client: " . mysqli_error($link) . "');</script>";
+        echo "<script>alert('Error updating client: " . implode(', ', $update_stmt->errorInfo()) . "');</script>";
     }
 }
 ?>
@@ -93,8 +113,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['form_submitted'])) {
                             <div class="card-body">
                                 <form method="POST">
                                 <input type="hidden" name="form_submitted" value="1">
+                                <input type="hidden" name="client_id" value="<?php echo htmlspecialchars($client['client_id']); ?>">
+                                <input type="hidden" name="branch_id" value="<?php echo htmlspecialchars($branch_id); ?>">
 
-                                    <input type="hidden" name="client_id" value="<?php echo htmlspecialchars($client['client_id']); ?>">
                                     <div class="mb-3">
                                         <label for="name" class="form-label">Name</label>
                                         <input class="form-control" type="text" name="name" id="name" value="<?php echo htmlspecialchars($client['name']); ?>" required>

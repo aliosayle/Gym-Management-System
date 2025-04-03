@@ -15,6 +15,44 @@ $start_date = isset($_GET['start_date']) ? $_GET['start_date'] : $default_start_
 $end_date = isset($_GET['end_date']) ? $_GET['end_date'] : $default_end_date;
 $payment_method = isset($_GET['payment_method']) ? $_GET['payment_method'] : '';
 
+// Get the selected branch ID from session or query parameters
+$selected_branch_id = null;
+
+if (isset($_GET['branch_id'])) {
+    $selected_branch_id = $_GET['branch_id'];
+} elseif (isset($_SESSION['selected_branch_id'])) {
+    $selected_branch_id = $_SESSION['selected_branch_id'];
+} elseif (isset($user_branches) && !empty($user_branches)) {
+    $selected_branch_id = $user_branches[0]['id'];
+}
+
+// Ensure we have a valid branch ID
+if (empty($selected_branch_id) && isset($user_branches) && !empty($user_branches)) {
+    $selected_branch_id = $user_branches[0]['id'];
+} elseif (empty($selected_branch_id)) {
+    $selected_branch_id = 1; // Default to branch ID 1 if nothing else is available
+}
+
+// Store selected branch in session
+$_SESSION['selected_branch_id'] = $selected_branch_id;
+
+// Get branch name for display
+$branch_name = "";
+if (!empty($selected_branch_id)) {
+    try {
+        $branch_query = "SELECT name FROM branches WHERE id = ?";
+        $branch_stmt = $pdo->prepare($branch_query);
+        $branch_stmt->execute([$selected_branch_id]);
+        $branch = $branch_stmt->fetch(PDO::FETCH_ASSOC);
+        if ($branch) {
+            $branch_name = $branch['name'];
+            $_SESSION['selected_branch_name'] = $branch_name;
+        }
+    } catch (PDOException $e) {
+        error_log("Error fetching branch name: " . $e->getMessage());
+    }
+}
+
 // Get payment methods for filter dropdown
 $payment_methods = ['Cash', 'Credit Card', 'Debit Card', 'Bank Transfer', 'Mobile Payment', 'Other'];
 ?>
@@ -45,7 +83,12 @@ $payment_methods = ['Cash', 'Credit Card', 'Debit Card', 'Bank Transfer', 'Mobil
                     <div class="row">
                         <div class="col-12">
                             <div class="page-title-box d-sm-flex align-items-center justify-content-between">
-                                <h4 class="mb-sm-0 font-size-18">Sales Report</h4>
+                                <h4 class="mb-sm-0 font-size-18">
+                                    Sales Report
+                                    <?php if (!empty($branch_name)): ?>
+                                        - <?php echo htmlspecialchars($branch_name); ?>
+                                    <?php endif; ?>
+                                </h4>
                                 <div class="page-title-right">
                                     <ol class="breadcrumb m-0">
                                         <li class="breadcrumb-item"><a href="index.php">Home</a></li>
@@ -89,6 +132,25 @@ $payment_methods = ['Cash', 'Credit Card', 'Debit Card', 'Bank Transfer', 'Mobil
                                                     </select>
                                                 </div>
                                             </div>
+                                            
+                                            <?php if (isset($user_branches) && count($user_branches) > 1): ?>
+                                            <div class="col-md-3">
+                                                <div class="mb-3">
+                                                    <label class="form-label">Branch</label>
+                                                    <select class="form-select" name="branch_id">
+                                                        <?php foreach ($user_branches as $branch): ?>
+                                                            <option value="<?php echo $branch['id']; ?>" 
+                                                                <?php echo ($branch['id'] == $selected_branch_id) ? 'selected' : ''; ?>>
+                                                                <?php echo htmlspecialchars($branch['name']); ?>
+                                                            </option>
+                                                        <?php endforeach; ?>
+                                                    </select>
+                                                </div>
+                                            </div>
+                                            <?php else: ?>
+                                            <input type="hidden" name="branch_id" value="<?php echo $selected_branch_id; ?>">
+                                            <?php endif; ?>
+                                            
                                             <div class="col-md-3">
                                                 <div class="mb-3">
                                                     <label class="form-label d-block">&nbsp;</label>
@@ -111,6 +173,10 @@ $payment_methods = ['Cash', 'Credit Card', 'Debit Card', 'Bank Transfer', 'Mobil
                             $where_clause = "WHERE sale_date BETWEEN :start_date AND DATE_ADD(:end_date, INTERVAL 1 DAY)";
                             $params = [':start_date' => $start_date, ':end_date' => $end_date];
                             
+                            // Add branch filter
+                            $where_clause .= " AND sales.branch_id = :branch_id";
+                            $params[':branch_id'] = $selected_branch_id;
+                            
                             if (!empty($payment_method)) {
                                 $where_clause .= " AND payment_method = :payment_method";
                                 $params[':payment_method'] = $payment_method;
@@ -126,7 +192,7 @@ $payment_methods = ['Cash', 'Credit Card', 'Debit Card', 'Bank Transfer', 'Mobil
                             $sales_summary = $stmt->fetch(PDO::FETCH_ASSOC);
                             
                             // Get total items sold
-                            $query = "SELECT SUM(quantity) as total_items FROM sale_items 
+                            $query = "SELECT SUM(sale_items.quantity) as total_items FROM sale_items 
                                       JOIN sales ON sale_items.sale_id = sales.sale_id $where_clause";
                             $stmt = $pdo->prepare($query);
                             foreach ($params as $key => $value) {
@@ -242,11 +308,15 @@ $payment_methods = ['Cash', 'Credit Card', 'Debit Card', 'Bank Transfer', 'Mobil
                                             <?php
                                             try {
                                                 // Build the WHERE clause for filtering
-                                                $where_clause = "WHERE sale_date BETWEEN :start_date AND DATE_ADD(:end_date, INTERVAL 1 DAY)";
+                                                $where_clause = "WHERE s.sale_date BETWEEN :start_date AND DATE_ADD(:end_date, INTERVAL 1 DAY)";
                                                 $params = [':start_date' => $start_date, ':end_date' => $end_date];
                                                 
+                                                // Add branch filter
+                                                $where_clause .= " AND s.branch_id = :branch_id";
+                                                $params[':branch_id'] = $selected_branch_id;
+                                                
                                                 if (!empty($payment_method)) {
-                                                    $where_clause .= " AND payment_method = :payment_method";
+                                                    $where_clause .= " AND s.payment_method = :payment_method";
                                                     $params[':payment_method'] = $payment_method;
                                                 }
                                                 
@@ -450,6 +520,7 @@ $payment_methods = ['Cash', 'Credit Card', 'Debit Card', 'Bank Transfer', 'Mobil
                         d.start_date = '<?php echo $start_date; ?>';
                         d.end_date = '<?php echo $end_date; ?>';
                         d.payment_method = '<?php echo $payment_method; ?>';
+                        d.branch_id = '<?php echo $selected_branch_id; ?>';
                     }
                 },
                 columns: [
@@ -483,7 +554,10 @@ $payment_methods = ['Cash', 'Credit Card', 'Debit Card', 'Bank Transfer', 'Mobil
                 $.ajax({
                     url: 'ajax/get_sale_details.php',
                     type: 'GET',
-                    data: { sale_id: saleId },
+                    data: { 
+                        sale_id: saleId,
+                        branch_id: '<?php echo $selected_branch_id; ?>' 
+                    },
                     dataType: 'json',
                     success: function(response) {
                         if (response.error) {
@@ -516,7 +590,7 @@ $payment_methods = ['Cash', 'Credit Card', 'Debit Card', 'Bank Transfer', 'Mobil
             // Handle print receipt button click
             $('#sales-datatable').on('click', '.print-receipt', function() {
                 var saleId = $(this).data('id');
-                window.open('ajax/print_receipt.php?sale_id=' + saleId, '_blank');
+                window.open('ajax/print_receipt.php?sale_id=' + saleId + '&branch_id=<?php echo $selected_branch_id; ?>', '_blank');
             });
         });
     </script>

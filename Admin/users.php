@@ -3,9 +3,10 @@
 error_reporting(E_ALL);
 ini_set('display_errors', 1);
 
-// Start session
+// Start session and include necessary files
 session_start();
 require 'layouts/config.php';
+require 'layouts/check_permission.php';
 
 // Check if user is logged in
 if (!isset($_SESSION['id'])) {
@@ -13,15 +14,21 @@ if (!isset($_SESSION['id'])) {
     exit;
 }
 
-// Check if user is admin
+// Check if user has permission to manage users
+$can_manage_users = has_permission('can_manage_users', $pdo);
+$is_admin = false;
+
+// Also check admin status for certain operations
 $user_id = $_SESSION['id'];
 $query = "SELECT isadmin FROM users WHERE id = :id";
 $stmt = $pdo->prepare($query);
 $stmt->execute(['id' => $user_id]);
 $user = $stmt->fetch(PDO::FETCH_ASSOC);
+$is_admin = isset($user['isadmin']) && $user['isadmin'] == 1;
 
-if (!isset($user['isadmin']) || $user['isadmin'] != 1) {
-    header("Location: clients.php");
+if (!$can_manage_users) {
+    $_SESSION['error_message'] = "You don't have permission to access the user management.";
+    header("Location: index.php");
     exit;
 }
 
@@ -76,6 +83,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_user'])) {
         if ($result) {
             $message = "User added successfully";
             $messageType = 'success';
+            
+            // Get the new user's ID
+            $newUserId = $pdo->lastInsertId();
+            
+            // Create default permissions for the new user
+            $insertPermQuery = "INSERT INTO user_permissions (user_id, can_view_dashboard, can_manage_clients) 
+                              VALUES (:user_id, 1, 1)";
+            $insertPermStmt = $pdo->prepare($insertPermQuery);
+            $insertPermStmt->execute(['user_id' => $newUserId]);
+            
+            // Assign to the default branch
+            $insertBranchQuery = "INSERT INTO user_branches (user_id, branch_id) 
+                                VALUES (:user_id, 1)";
+            $insertBranchStmt = $pdo->prepare($insertBranchQuery);
+            $insertBranchStmt->execute(['user_id' => $newUserId]);
         } else {
             throw new Exception("Error adding user");
         }

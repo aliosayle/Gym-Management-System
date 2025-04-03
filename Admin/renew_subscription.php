@@ -30,6 +30,8 @@ if (!isset($_GET['id'])) {
 
 $client_id = $_GET['id'];
 $package_id = $_GET['package'] ?? null;
+$custom_start_date = $_GET['start_date'] ?? null;
+$branch_id = $_GET['branch_id'] ?? null;
 
 if (empty($package_id)) {
     echo json_encode([
@@ -43,14 +45,23 @@ try {
     // Begin transaction
     $pdo->beginTransaction();
     
-    // Get package details
+    // Verify package is from the correct branch
     $package_query = "SELECT * FROM packages WHERE id = :package_id";
+    if ($branch_id) {
+        $package_query .= " AND branch_id = :branch_id";
+    }
     $package_stmt = $pdo->prepare($package_query);
-    $package_stmt->execute(['package_id' => $package_id]);
+    
+    $params = ['package_id' => $package_id];
+    if ($branch_id) {
+        $params['branch_id'] = $branch_id;
+    }
+    
+    $package_stmt->execute($params);
     $package = $package_stmt->fetch(PDO::FETCH_ASSOC);
     
     if (!$package) {
-        throw new Exception('Package not found');
+        throw new Exception('Package not found or not available for this branch');
     }
     
     // Calculate total amount and expiry date
@@ -67,23 +78,36 @@ try {
         throw new Exception('Client not found');
     }
     
-    // Calculate new subscription end date
-    $current_date = new DateTime();
-    $end_date = null;
+    // Use the branch_id from the parameter or from the client record
+    $payment_branch_id = $branch_id ?: $client['branch_id'];
     
-    // If current subscription is active and end date is in the future, extend from there
-    if ($client['subscription_status'] == 'active' && 
-        !empty($client['subscription_end_date']) && 
-        new DateTime($client['subscription_end_date']) > $current_date) {
-        $end_date = new DateTime($client['subscription_end_date']);
+    // Determine start date for the new subscription
+    if (!empty($custom_start_date)) {
+        // Use custom start date if provided
+        $start_date = new DateTime($custom_start_date);
+        if (!$start_date) {
+            throw new Exception('Invalid start date format. Please use YYYY-MM-DD');
+        }
     } else {
-        // Otherwise start from today
-        $end_date = $current_date;
+        // Otherwise use logic based on current subscription
+        $current_date = new DateTime();
+        
+        // If current subscription is active and end date is in the future, extend from there
+        if ($client['subscription_status'] == 'active' && 
+            !empty($client['subscription_end_date']) && 
+            new DateTime($client['subscription_end_date']) > $current_date) {
+            $start_date = new DateTime($client['subscription_end_date']);
+        } else {
+            // Otherwise start from today
+            $start_date = $current_date;
+        }
     }
     
-    // Add days to the end date
+    // Add days to calculate end date
+    $end_date = clone $start_date;
     $end_date->add(new DateInterval("P{$days}D"));
     $new_end_date = $end_date->format('Y-m-d');
+    $formatted_start_date = $start_date->format('Y-m-d');
     
     // Generate payment ID
     $payment_id = uniqid();
@@ -103,15 +127,17 @@ try {
     
     // Insert new payment record
     $insert_payment_sql = "INSERT INTO payments 
-                         (payment_id, client_id, amount, payment_method, package_id, payment_status) 
+                         (payment_id, client_id, amount, payment_method, package_id, payment_status, payment_date, branch_id) 
                          VALUES 
-                         (:payment_id, :client_id, :amount, 'cash', :package_id, 'Pending')";
+                         (:payment_id, :client_id, :amount, 'cash', :package_id, 'Pending', :payment_date, :branch_id)";
     $insert_payment_stmt = $pdo->prepare($insert_payment_sql);
     $insert_payment_stmt->execute([
         'payment_id' => $payment_id,
         'client_id' => $client_id,
         'amount' => $amount,
-        'package_id' => $package_id
+        'package_id' => $package_id,
+        'payment_date' => $formatted_start_date,
+        'branch_id' => $payment_branch_id
     ]);
     
     // Commit transaction
@@ -131,6 +157,7 @@ try {
         'client_id' => $client_id,
         'payment_id' => $payment_id,
         'amount' => $amount,
+        'start_date' => $formatted_start_date,
         'new_end_date' => $new_end_date
     ]);
     

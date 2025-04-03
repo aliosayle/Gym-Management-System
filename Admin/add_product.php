@@ -11,6 +11,10 @@ if (!$pdo) {
     die("Connection not established: " . $pdo->errorInfo());
 }
 
+// Get branch ID from the request
+$branch_id = isset($_GET['branch_id']) ? intval($_GET['branch_id']) : 
+            (isset($_SESSION['selected_branch_id']) ? intval($_SESSION['selected_branch_id']) : 1);
+
 // Check if user ID is set in session
 if (!isset($_SESSION['id'])) {
     die("User ID is not set in session.");
@@ -32,14 +36,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['form_submit']) && $pe
     $description = $_POST['description'];
     $price = $_POST['price'];
     $quantity_in_stock = (int)$_POST['quantity_in_stock'];
-    $insert_query = "INSERT INTO products (name, description, price, quantity_in_stock) VALUES (:product_name, :description, :price, :quantity_in_stock)";
+    $branch_id = isset($_POST['branch_id']) ? (int)$_POST['branch_id'] : $branch_id;
+    
+    $insert_query = "INSERT INTO products (name, description, price, quantity_in_stock, branch_id) 
+                    VALUES (:product_name, :description, :price, :quantity_in_stock, :branch_id)";
     $insert_stmt = $pdo->prepare($insert_query);
-    if ($insert_stmt->execute(['product_name' => $product_name, 'description' => $description, 'price' => $price, 'quantity_in_stock' => $quantity_in_stock])) {
+    if ($insert_stmt->execute([
+        'product_name' => $product_name, 
+        'description' => $description, 
+        'price' => $price, 
+        'quantity_in_stock' => $quantity_in_stock,
+        'branch_id' => $branch_id
+    ])) {
+        // Make sure to update the selected branch ID in the session to match the branch we're redirecting to
+        $_SESSION['selected_branch_id'] = $branch_id;
+        
+        // Get branch name to update in session
+        $branch_query = "SELECT name FROM branches WHERE id = :branch_id";
+        $branch_stmt = $pdo->prepare($branch_query);
+        $branch_stmt->execute(['branch_id' => $branch_id]);
+        $branch_name = $branch_stmt->fetchColumn();
+        if ($branch_name) {
+            $_SESSION['selected_branch_name'] = $branch_name;
+        }
+        
         $_SESSION['delete_message'] = "Product added successfully";
     } else {
         $_SESSION['delete_message'] = "Error adding product: " . implode(", ", $insert_stmt->errorInfo());
     }
-    header("Location: products.php");
+    header("Location: products.php?branch_id=" . $branch_id);
     exit();
 } elseif ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $_SESSION['delete_message'] = "You do not have permission to add products.";
@@ -72,7 +97,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['form_submit']) && $pe
                                 <h4 class="card-title">Add New Product</h4>
                             </div>
                             <div class="card-body">
-                                <form method="POST" action="add_product.php">
+                                <form method="POST" action="add_product.php?branch_id=<?php echo $branch_id; ?>">
                                     <input type="hidden" name="form_submit" value="1">
                                     <div class="mb-3">
                                         <label for="product_name" class="form-label">Product Name</label>
@@ -90,6 +115,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['form_submit']) && $pe
                                         <label for="quantity_in_stock" class="form-label">Quantity in Stock</label>
                                         <input type="number" class="form-control" id="quantity_in_stock" name="quantity_in_stock" required>
                                     </div>
+                                    <input type="hidden" name="branch_id" value="<?php echo $branch_id; ?>">
                                     <button type="submit" class="btn btn-primary">Add Product</button>
                                 </form>
                             </div>

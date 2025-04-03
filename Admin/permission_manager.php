@@ -6,6 +6,7 @@ ini_set('display_errors', 1);
 // Start session
 session_start();
 require 'layouts/config.php';
+require 'layouts/check_permission.php';
 
 // Check if user is logged in
 if (!isset($_SESSION['id'])) {
@@ -13,15 +14,12 @@ if (!isset($_SESSION['id'])) {
     exit;
 }
 
-// Check if user is admin
-$user_id = $_SESSION['id'];
-$query = "SELECT isadmin FROM users WHERE id = :id";
-$stmt = $pdo->prepare($query);
-$stmt->execute(['id' => $user_id]);
-$user = $stmt->fetch(PDO::FETCH_ASSOC);
+// Check if user has permission to manage users
+$can_manage_users = has_permission('can_manage_users', $pdo);
 
-if (!isset($user['isadmin']) || $user['isadmin'] != 1) {
-    header("Location: clients.php");
+if (!$can_manage_users) {
+    $_SESSION['error_message'] = "You don't have permission to manage user permissions.";
+    header("Location: index.php");
     exit;
 }
 

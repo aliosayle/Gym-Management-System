@@ -117,12 +117,15 @@ function addToCart() {
         ];
     }
     
+    // Get branch ID from session
+    $branch_id = isset($_SESSION['selected_branch_id']) ? $_SESSION['selected_branch_id'] : 1;
+    
     try {
-        // Check if product exists and has enough stock
-        $query = "SELECT * FROM products WHERE product_id = ?";
+        // Check if product exists and has enough stock (filtered by branch_id)
+        $query = "SELECT * FROM products WHERE product_id = ? AND branch_id = ?";
         
         $stmt = $pdo->prepare($query);
-        $stmt->execute([$product_id]);
+        $stmt->execute([$product_id, $branch_id]);
         
         if ($stmt->rowCount() === 0) {
             return [
@@ -175,7 +178,8 @@ function addToCart() {
                 'name' => $product['name'],
                 'price' => (float)$product['price'],
                 'quantity' => $quantity,
-                'max_quantity' => $product['quantity_in_stock']
+                'max_quantity' => $product['quantity_in_stock'],
+                'branch_id' => $branch_id
             ];
         }
         
@@ -397,10 +401,13 @@ function completeSale() {
         // Set default values
         $notes = isset($_POST['notes']) ? $_POST['notes'] : '';
         
-        // Insert sale record
-        $sale_query = "INSERT INTO sales (user_id, total_amount, sale_date) VALUES (?, ?, NOW())";
+        // Get branch_id from session
+        $branch_id = isset($_SESSION['selected_branch_id']) ? $_SESSION['selected_branch_id'] : 1;
+        
+        // Insert sale record with branch_id
+        $sale_query = "INSERT INTO sales (user_id, total_amount, sale_date, branch_id) VALUES (?, ?, NOW(), ?)";
         $sale_stmt = $pdo->prepare($sale_query);
-        $sale_stmt->execute([$_SESSION['user_id'], $total_amount]);
+        $sale_stmt->execute([$_SESSION['user_id'], $total_amount, $branch_id]);
         
         if ($sale_stmt->rowCount() === 0) {
             throw new PDOException("Failed to create sale record");
@@ -415,25 +422,25 @@ function completeSale() {
             $quantity = $item['quantity'];
             $price = $item['price'];
             
-            // Insert sale item
-            $item_query = "INSERT INTO sale_items (sale_id, product_id, quantity, price) VALUES (?, ?, ?, ?)";
+            // Insert sale item with branch_id
+            $item_query = "INSERT INTO sale_items (sale_id, product_id, quantity, price, branch_id) VALUES (?, ?, ?, ?, ?)";
             $item_stmt = $pdo->prepare($item_query);
-            $item_stmt->execute([$sale_id, $product_id, $quantity, $price]);
+            $item_stmt->execute([$sale_id, $product_id, $quantity, $price, $branch_id]);
             
             if ($item_stmt->rowCount() === 0) {
                 throw new PDOException("Failed to insert sale item");
             }
             
             // Update product inventory
-            $update_query = "UPDATE products SET quantity_in_stock = quantity_in_stock - ? WHERE product_id = ? AND quantity_in_stock >= ?";
+            $update_query = "UPDATE products SET quantity_in_stock = quantity_in_stock - ? WHERE product_id = ? AND quantity_in_stock >= ? AND branch_id = ?";
             $update_stmt = $pdo->prepare($update_query);
-            $update_stmt->execute([$quantity, $product_id, $quantity]);
+            $update_stmt->execute([$quantity, $product_id, $quantity, $branch_id]);
             
-            // Record transaction in inventory_transactions
-            $transaction_query = "INSERT INTO inventory_transactions (product_id, quantity, transaction_type, transaction_date) VALUES (?, ?, 'sale', NOW())";
+            // Record transaction in inventory_transactions with branch_id
+            $transaction_query = "INSERT INTO inventory_transactions (product_id, quantity, transaction_type, transaction_date, branch_id) VALUES (?, ?, 'sale', NOW(), ?)";
             $transaction_stmt = $pdo->prepare($transaction_query);
             $neg_quantity = -$quantity; // Negative quantity for sales
-            $transaction_stmt->execute([$product_id, $neg_quantity]);
+            $transaction_stmt->execute([$product_id, $neg_quantity, $branch_id]);
         }
         
         // Commit transaction
@@ -474,12 +481,15 @@ function getProductDetails() {
     
     $product_id = $_POST['product_id'];
     
+    // Get branch ID from session
+    $branch_id = isset($_SESSION['selected_branch_id']) ? $_SESSION['selected_branch_id'] : 1;
+    
     try {
-        // Get product details
-        $query = "SELECT * FROM products WHERE product_id = ?";
+        // Get product details filtered by branch_id
+        $query = "SELECT * FROM products WHERE product_id = ? AND branch_id = ?";
         
         $stmt = $pdo->prepare($query);
-        $stmt->execute([$product_id]);
+        $stmt->execute([$product_id, $branch_id]);
         
         if ($stmt->rowCount() === 0) {
             return [
@@ -510,17 +520,21 @@ function searchProducts() {
     // Get search term
     $search = isset($_POST['search']) ? $_POST['search'] : '';
     
+    // Get branch ID from session
+    $branch_id = isset($_SESSION['selected_branch_id']) ? $_SESSION['selected_branch_id'] : 1;
+    
     try {
-        // Search products
+        // Search products filtered by branch_id
         $query = "SELECT * FROM products 
-                 WHERE name LIKE ? OR description LIKE ?
+                 WHERE (name LIKE ? OR description LIKE ?) 
+                 AND branch_id = ?
                  ORDER BY name
                  LIMIT 20";
         
         $search_param = "%$search%";
         
         $stmt = $pdo->prepare($query);
-        $stmt->execute([$search_param, $search_param]);
+        $stmt->execute([$search_param, $search_param, $branch_id]);
         
         $products = $stmt->fetchAll(PDO::FETCH_ASSOC);
         
@@ -551,11 +565,14 @@ function checkInventory() {
     
     $product_id = $_POST['product_id'];
     
+    // Get branch ID from session
+    $branch_id = isset($_SESSION['selected_branch_id']) ? $_SESSION['selected_branch_id'] : 1;
+    
     try {
-        // Get product quantity
-        $query = "SELECT quantity_in_stock FROM products WHERE product_id = ?";
+        // Get product quantity filtered by branch_id
+        $query = "SELECT quantity_in_stock FROM products WHERE product_id = ? AND branch_id = ?";
         $stmt = $pdo->prepare($query);
-        $stmt->execute([$product_id]);
+        $stmt->execute([$product_id, $branch_id]);
         
         if ($stmt->rowCount() === 0) {
             return [

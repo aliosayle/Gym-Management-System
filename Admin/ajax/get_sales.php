@@ -19,24 +19,30 @@ $order_dir = isset($_POST['order'][0]['dir']) ? $_POST['order'][0]['dir'] : 'des
 $start_date = isset($_POST['start_date']) ? $_POST['start_date'] : date('Y-m-d', strtotime('-30 days'));
 $end_date = isset($_POST['end_date']) ? $_POST['end_date'] : date('Y-m-d');
 $payment_method = isset($_POST['payment_method']) ? $_POST['payment_method'] : '';
+$branch_id = isset($_POST['branch_id']) ? $_POST['branch_id'] : 
+             (isset($_SESSION['selected_branch_id']) ? $_SESSION['selected_branch_id'] : 1);
 
 try {
     // Build the WHERE clause
-    $where_clause = "WHERE sale_date BETWEEN :start_date AND DATE_ADD(:end_date, INTERVAL 1 DAY)";
+    $where_clause = "WHERE s.sale_date BETWEEN :start_date AND DATE_ADD(:end_date, INTERVAL 1 DAY)";
     $params = [':start_date' => $start_date, ':end_date' => $end_date];
     
+    // Add branch filter
+    $where_clause .= " AND s.branch_id = :branch_id";
+    $params[':branch_id'] = $branch_id;
+    
     if (!empty($payment_method)) {
-        $where_clause .= " AND payment_method = :payment_method";
+        $where_clause .= " AND s.payment_method = :payment_method";
         $params[':payment_method'] = $payment_method;
     }
     
     if (!empty($search)) {
-        $where_clause .= " AND (sale_id LIKE :search OR customer_name LIKE :search)";
+        $where_clause .= " AND (s.sale_id LIKE :search OR s.customer_name LIKE :search)";
         $params[':search'] = "%$search%";
     }
     
     // Get total records count
-    $count_query = "SELECT COUNT(*) as total FROM sales $where_clause";
+    $count_query = "SELECT COUNT(*) as total FROM sales s $where_clause";
     $stmt = $pdo->prepare($count_query);
     foreach ($params as $key => $value) {
         $stmt->bindValue($key, $value);
@@ -45,7 +51,7 @@ try {
     $total_records = $stmt->fetch(PDO::FETCH_ASSOC)['total'];
     
     // Define column names for ordering
-    $columns = ['sale_id', 'sale_date', 'customer_name', 'items', 'total_amount'];
+    $columns = ['s.sale_id', 's.sale_date', 's.customer_name', 'items', 's.total_amount'];
     $order_by = $columns[$order_column] . ' ' . $order_dir;
     
     // Get filtered records

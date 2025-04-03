@@ -70,6 +70,49 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 
                             // Redirect user to welcome page
                             header("location: index.php");
+
+                            // If login is successful, add the following diagnostic code:
+                            error_log("User logged in successfully: ID=" . $_SESSION["id"] . ", Username=" . $_SESSION["username"]);
+                            
+                            // Check if user has branch assignments
+                            try {
+                                $query = "SELECT COUNT(*) as count FROM user_branches WHERE user_id = :user_id";
+                                $stmt = $pdo->prepare($query);
+                                $stmt->execute(['user_id' => $_SESSION["id"]]);
+                                $branch_count = $stmt->fetchColumn();
+                                
+                                error_log("User has {$branch_count} assigned branches");
+                                
+                                if ($branch_count == 0) {
+                                    // Attempt to automatically assign to branch 1
+                                    $insert_query = "INSERT INTO user_branches (user_id, branch_id) VALUES (:user_id, 1)";
+                                    $insert_stmt = $pdo->prepare($insert_query);
+                                    $insert_stmt->execute(['user_id' => $_SESSION["id"]]);
+                                    error_log("Automatically assigned user to branch 1");
+                                }
+                                
+                                // Set the branch in session
+                                $branch_query = "SELECT b.id, b.name, c.name as company_name
+                                              FROM branches b
+                                              JOIN companies c ON b.company_id = c.id
+                                              JOIN user_branches ub ON b.id = ub.branch_id
+                                              WHERE ub.user_id = :user_id
+                                              LIMIT 1";
+                                $branch_stmt = $pdo->prepare($branch_query);
+                                $branch_stmt->execute(['user_id' => $_SESSION["id"]]);
+                                $branch = $branch_stmt->fetch(PDO::FETCH_ASSOC);
+                                
+                                if ($branch) {
+                                    $_SESSION['selected_branch_id'] = $branch['id'];
+                                    $_SESSION['selected_branch_name'] = $branch['name'];
+                                    $_SESSION['selected_company_name'] = $branch['company_name'];
+                                    error_log("Set user's branch: ID=" . $branch['id'] . ", Name=" . $branch['name']);
+                                } else {
+                                    error_log("No branch found for user even after assignment attempt");
+                                }
+                            } catch (PDOException $e) {
+                                error_log("Error checking user branch assignments: " . $e->getMessage());
+                            }
                         } else {
                             // Display a generic error message
                             $login_err = "Invalid Credentials.";

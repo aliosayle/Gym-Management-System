@@ -10,22 +10,33 @@ if (!$pdo) {
     die("Connection not established: " . $pdo->errorInfo());
 }
 
+// Include permission checks
+include 'layouts/check_permission.php';
+
 // Get user's assigned branches
 $user_id = isset($_SESSION['id']) ? $_SESSION['id'] : null;
 if ($user_id === null) {
     die("User ID is not set in the session.");
 }
 
-// Get user permissions
-$permission_query = "SELECT canedit, candelete, canadd, isadmin FROM users WHERE id = :id";
-$permission_stmt = $pdo->prepare($permission_query);
-$permission_stmt->execute(['id' => $user_id]);
-$permissions = $permission_stmt->fetch(PDO::FETCH_ASSOC);
+// Check specific permissions for this page
+$can_manage_packages = has_permission('can_manage_packages', $pdo);
+$can_add_package = has_permission('can_add_package', $pdo) || has_permission('can_manage_packages', $pdo);
+$can_edit_package = has_permission('can_edit_package', $pdo) || has_permission('can_manage_packages', $pdo);
+$can_delete_package = has_permission('can_delete_package', $pdo) || has_permission('can_manage_packages', $pdo);
 
-// Check if $permissions is false (no user found)
-if ($permissions === false) {
-    die("No permissions found for the given user.");
+// If user doesn't have permission to manage packages, redirect them
+if (!$can_manage_packages) {
+    $_SESSION['error_message'] = "You don't have permission to manage packages.";
+    header("Location: index.php");
+    exit;
 }
+
+// Get isadmin status for branch handling
+$admin_query = "SELECT isadmin FROM users WHERE id = :id";
+$admin_stmt = $pdo->prepare($admin_query);
+$admin_stmt->execute(['id' => $user_id]);
+$is_admin = $admin_stmt->fetchColumn();
 
 // Get user's assigned branches
 $branches_query = "SELECT b.* FROM branches b 
@@ -36,7 +47,7 @@ $branches_stmt->execute(['user_id' => $user_id]);
 $user_branches = $branches_stmt->fetchAll(PDO::FETCH_ASSOC);
 
 // If user is admin but has no branches assigned, get all branches
-if ($permissions['isadmin'] == 1 && empty($user_branches)) {
+if ($is_admin && empty($user_branches)) {
     $branches_query = "SELECT * FROM branches";
     $branches_stmt = $pdo->prepare($branches_query);
     $branches_stmt->execute();
@@ -78,15 +89,25 @@ if (empty($user_branches)) {
     }
 }
 
-// Get the selected branch (from POST, GET, or default to the first branch)
+// Get the selected branch (from POST, GET, session, or default to the first branch)
 $selected_branch_id = null;
 
 if (isset($_POST['branch_id'])) {
     $selected_branch_id = $_POST['branch_id'];
 } elseif (isset($_GET['branch_id'])) {
     $selected_branch_id = $_GET['branch_id'];
+} elseif (isset($_SESSION['selected_branch_id'])) {
+    // Use the branch selected in the header/vertical menu
+    $selected_branch_id = $_SESSION['selected_branch_id'];
 } elseif (!empty($user_branches)) {
     $selected_branch_id = $user_branches[0]['id'];
+}
+
+// Ensure we have a valid branch ID
+if (empty($selected_branch_id) && !empty($user_branches)) {
+    $selected_branch_id = $user_branches[0]['id'];
+} elseif (empty($selected_branch_id)) {
+    $selected_branch_id = 1; // Default to branch ID 1 if nothing else is available
 }
 
 if (isset($_SESSION['delete_message'])) {
@@ -96,7 +117,7 @@ if (isset($_SESSION['delete_message'])) {
 }
 
 // Protect POST actions with permission checks
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['package_name']) && $permissions['canadd'] == 1) {
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['package_name']) && $can_add_package) {
     $package_name = $_POST['package_name'];
     $price = $_POST['price'];
     $number_of_days = (int)$_POST['number_of_days'];
@@ -111,6 +132,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['package_name']) && $p
         'number_of_days' => $number_of_days,
         'branch_id' => $branch_id
     ])) {
+        // Make sure to update the selected branch ID in the session to match the branch we're working with
+        $_SESSION['selected_branch_id'] = $branch_id;
+        
+        // Get branch name to update in session
+        $branch_query = "SELECT name FROM branches WHERE id = :branch_id";
+        $branch_stmt = $pdo->prepare($branch_query);
+        $branch_stmt->execute(['branch_id' => $branch_id]);
+        $branch_name = $branch_stmt->fetchColumn();
+        if ($branch_name) {
+            $_SESSION['selected_branch_name'] = $branch_name;
+        }
+        
         echo "<script>alert('New package added successfully');</script>";
     } else {
         echo "<script>alert('Error adding package: " . implode(", ", $insert_stmt->errorInfo()) . "');</script>";
@@ -153,12 +186,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['package_name']) && $p
                         
                         <div class="card">
                             <div class="card-header d-flex justify-content-between align-items-center">
-                                <h4 class="card-title">Packages Table</h4>
+                                <h4 class="card-title">
+                                    Packages Table
+                                    <?php 
+                                    // Show selected branch name
+                                    if ($selected_branch_id) {
+                                        $branch_name = '';
+                                        // Find branch name from user_branches
+                                        foreach ($user_branches as $branch) {
+                                            if ($branch['id'] == $selected_branch_id) {
+                                                $branch_name = isset($branch['name']) ? $branch['name'] : 
+                                                               (isset($branch['branch_name']) ? $branch['branch_name'] : 'Branch ' . $branch['id']);
+                                                break;
+                                            }
+                                        }
+                                        if (!empty($branch_name)) {
+                                            echo ' - ' . htmlspecialchars($branch_name);
+                                        }
+                                    }
+                                    ?>
+                                </h4>
                             </div>
                             <div class="card-body">
                                 <form method="POST" action="add_package.php" class="mb-4">
                                     <input type="hidden" name="branch_id" value="<?php echo $selected_branch_id; ?>">
-                                    <button type="submit" class="btn btn-primary" <?php if ($permissions['canadd'] == 0) echo 'style="pointer-events: none; opacity: 0.6;"'; ?>>
+                                    <button type="submit" class="btn btn-primary" <?php if (!$can_add_package) echo 'style="pointer-events: none; opacity: 0.6;"'; ?>>
                                         <i class="fas fa-plus me-2"></i> Add New Package
                                     </button>
                                 </form>
@@ -192,13 +244,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['package_name']) && $p
                                                 echo "<form method='POST' action='edit_package.php?id={$row['id']}' style='display:inline-block;' onsubmit='return submitForm(this);'>";
                                                 echo "<input type='hidden' name='package_id' value='" . htmlspecialchars($row['id']) . "'>";
                                                 echo "<input type='hidden' name='branch_id' value='" . $selected_branch_id . "'>";
-                                                echo "<button type='submit' class='btn btn-success btn-sm action-button' " . ($permissions['canedit'] == 0 ? 'style="pointer-events: none; opacity: 0.6;"' : '') . ">
+                                                echo "<button type='submit' class='btn btn-success btn-sm action-button' " . 
+                                                    (!$can_edit_package ? 'style="pointer-events: none; opacity: 0.6;"' : '') . ">
                                                         <i class='mdi mdi-pencil d-block font-size-16'></i>
                                                       </button>";
                                                 echo "</form>";
 
                                                 // Delete Button with SweetAlert
-                                                echo "<button type='button' class='btn btn-danger btn-sm action-button sa-warning' data-id='" . htmlspecialchars($row['id']) . "' " . ($permissions['candelete'] == 0 ? 'disabled' : '') . ">
+                                                echo "<button type='button' class='btn btn-danger btn-sm action-button sa-warning' data-id='" . htmlspecialchars($row['id']) . "' " . 
+                                                    (!$can_delete_package ? 'disabled' : '') . ">
                                                         <i class='mdi mdi-trash-can d-block font-size-16'></i>
                                                       </button>";
 

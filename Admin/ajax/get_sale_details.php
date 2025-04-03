@@ -22,6 +22,10 @@ if (!isset($_GET['sale_id'])) {
 
 $sale_id = $_GET['sale_id'];
 
+// Get branch_id from request or session
+$branch_id = isset($_GET['branch_id']) ? $_GET['branch_id'] : 
+            (isset($_SESSION['selected_branch_id']) ? $_SESSION['selected_branch_id'] : 1);
+
 try {
     // Get sale details
     $query = "SELECT s.*, 
@@ -29,11 +33,14 @@ try {
               FROM sales s
               LEFT JOIN sale_items si ON s.sale_id = si.sale_id
               LEFT JOIN products p ON si.product_id = p.product_id
-              WHERE s.sale_id = :sale_id
+              WHERE s.sale_id = :sale_id AND s.branch_id = :branch_id
               GROUP BY s.sale_id";
     
     $stmt = $pdo->prepare($query);
-    $stmt->execute(['sale_id' => $sale_id]);
+    $stmt->execute([
+        'sale_id' => $sale_id,
+        'branch_id' => $branch_id
+    ]);
     $sale = $stmt->fetch(PDO::FETCH_ASSOC);
 
     if (!$sale) {

@@ -1,6 +1,17 @@
 <?php
 //include 'layouts/config.php'; // Include the config file where $pdo is defined
 
+// Include permission checking functions if not already included
+if (!function_exists('has_permission')) {
+    if (file_exists('layouts/check_permission.php')) {
+        include_once 'layouts/check_permission.php';
+    } elseif (file_exists('Admin/layouts/check_permission.php')) {
+        include_once 'Admin/layouts/check_permission.php';
+    } else {
+        include_once __DIR__ . '/check_permission.php';
+    }
+}
+
 // Fetch user permissions
 $user_id = $_SESSION['id']; // Assuming user_id is stored in session
 $permission_query = "SELECT isadmin FROM users WHERE id = :id";
@@ -8,6 +19,17 @@ $permission_stmt = $pdo->prepare($permission_query);
 $permission_stmt->execute(['id' => $user_id]);
 $permissions = $permission_stmt->fetch(PDO::FETCH_ASSOC);
 $is_admin = $permissions['isadmin'];
+
+// Get specific permissions for menu display
+$can_view_dashboard = has_permission('can_view_dashboard', $pdo);
+$can_manage_clients = has_permission('can_manage_clients', $pdo);
+$can_manage_inventory = has_permission('can_manage_inventory', $pdo);
+$can_manage_packages = has_permission('can_manage_packages', $pdo);
+$can_manage_companies = has_permission('can_manage_companies', $pdo);
+$can_manage_branches = has_permission('can_manage_branches', $pdo);
+$can_manage_users = has_permission('can_manage_users', $pdo);
+$can_use_pos = has_permission('can_use_pos', $pdo);
+$can_view_reports = has_permission('can_view_reports', $pdo);
 ?>
 
 <header id="page-topbar">
@@ -110,25 +132,25 @@ $is_admin = $permissions['isadmin'];
             }
             ?>
 
+            <?php if ($can_use_pos): ?>
             <div class="dropdown d-none d-lg-inline-block ms-1">
-    <button type="button" class="btn header-item" data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
-        <i data-feather="grid" class="icon-lg"></i>
-    </button>
-    <div class="dropdown-menu dropdown-menu-lg dropdown-menu-end">
-        <div class="p-2">
-            <div class="row g-0">
-                <div class="col">
-                    <a class="dropdown-icon-item" href="pos.php">
-                        <i class="fas fa-cash-register"></i>  <!-- POS Icon -->
-                        <span>POS</span>
-                    </a>
+                <button type="button" class="btn header-item" data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+                    <i data-feather="grid" class="icon-lg"></i>
+                </button>
+                <div class="dropdown-menu dropdown-menu-lg dropdown-menu-end">
+                    <div class="p-2">
+                        <div class="row g-0">
+                            <div class="col">
+                                <a class="dropdown-icon-item" href="pos.php">
+                                    <i class="fas fa-cash-register"></i>  <!-- POS Icon -->
+                                    <span>POS</span>
+                                </a>
+                            </div>
+                        </div>
+                    </div>
                 </div>
-
             </div>
-        </div>
-    </div>
-</div>
-
+            <?php endif; ?>
 
             </div>
 
@@ -181,90 +203,105 @@ $is_admin = $permissions['isadmin'];
                         "Elements" => "Elements"
                     ];
                 }
-                
-                // Check if user is admin
-                $is_admin = false;
-                if (isset($_SESSION['id'])) {
-                    try {
-                        $admin_query = "SELECT isadmin FROM users WHERE id = :id";
-                        $admin_stmt = $pdo->prepare($admin_query);
-                        $admin_stmt->execute(['id' => $_SESSION['id']]);
-                        $admin_result = $admin_stmt->fetch(PDO::FETCH_ASSOC);
-                        $is_admin = isset($admin_result['isadmin']) && $admin_result['isadmin'] == 1;
-                    } catch (Exception $e) {
-                        // Silently fail
-                    }
-                }
                 ?>
                 
                 <li class="menu-title" data-key="t-menu"><?php echo $language["Menu"]; ?></li>
 
+                <!-- Clients menu - available to everyone with appropriate permissions -->
+                <?php if ($can_manage_clients): ?>
                 <li>
                     <a href="clients.php">
                         <i data-feather="file-text"></i>
                         <span data-key="t-dashboard">Clients</span>
                     </a>
-                    <?php if ($is_admin) { ?>
-                        <a href="index.php">
-                            <i data-feather="home"></i>
-                            <span data-key="t-dashboard"><?php echo $language["Dashboard"]; ?></span>
-                        </a>
-                        <a href="products.php">
-                            <i data-feather="navigation"></i>
-                            <span data-key="t-dashboard">Products</span>
-                        </a>
-                    <?php } ?>
                 </li>
+                <?php endif; ?>
+
+                <!-- Dashboard menu - available to users with dashboard permission -->
+                <?php if ($can_view_dashboard): ?>
+                <li>
+                    <a href="index.php">
+                        <i data-feather="home"></i>
+                        <span data-key="t-dashboard"><?php echo $language["Dashboard"]; ?></span>
+                    </a>
+                </li>
+                <?php endif; ?>
+
+                <!-- Products menu - available to users with inventory management permission -->
+                <?php if ($can_manage_inventory): ?>
+                <li>
+                    <a href="products.php">
+                        <i data-feather="navigation"></i>
+                        <span data-key="t-dashboard">Products</span>
+                    </a>
+                </li>
+                <?php endif; ?>
+
+                <?php if ($can_use_pos): ?>
+                <li>
+                    <a href="pos.php">
+                        <i data-feather="shopping-cart"></i>
+                        <span data-key="t-dashboard">POS</span>
+                    </a>
+                </li>
+                <?php endif; ?>
+
+                <?php if ($can_view_reports): ?>
+                <li>
+                    <a href="sales_report.php">
+                        <i data-feather="bar-chart-2"></i>
+                        <span data-key="t-dashboard">Sales Reports</span>
+                    </a>
+                </li>
+                <?php endif; ?>
 
                 <li class="menu-title mt-2" data-key="t-components"><?php echo $language["Elements"]; ?></li>
 
-                <?php if ($is_admin) { ?>
-                    <li>
-                        <a href="packages.php">
-                            <i data-feather="box"></i>
-                            <span data-key="t-components">Packages</span>
-                        </a>
-                    </li>
-                    <li>
-                        <a href="companies.php">
-                            <i data-feather="briefcase"></i>
-                            <span data-key="t-components">Companies & Branches</span>
-                        </a>
-                    </li>
-                    <li>
-                        <a href="users.php">
-                            <i data-feather="users"></i>
-                            <span data-key="t-components">User Management</span>
-                        </a>
-                    </li>
-                    <li>
-                        <a href="setup_subscription_cron.php">
-                            <i data-feather="clock"></i>
-                            <span data-key="t-components">Subscription Automation</span>
-                        </a>
-                    </li>
-                    <li>
-                        <a href="setup_permissions.php">
-                            <i data-feather="shield"></i>
-                            <span data-key="t-components">Setup Permissions</span>
-                        </a>
-                    </li>
-                <?php } ?>
-
-                <!-- Point of Sale Section -->
+                <!-- Packages menu - available to users with package management permission -->
+                <?php if ($can_manage_packages): ?>
                 <li>
-                    <a href="javascript: void(0);" class="has-arrow waves-effect">
-                        <i class="bx bx-cart-alt"></i>
-                        <span>Store & Inventory</span>
+                    <a href="packages.php">
+                        <i data-feather="box"></i>
+                        <span data-key="t-components">Packages</span>
                     </a>
-                    <ul class="sub-menu" aria-expanded="false">
-                        <li><a href="pos.php">Point of Sale</a></li>
-                        <?php if ($is_admin) { ?>
-                            <li><a href="inventory.php">Inventory Management</a></li>
-                            <li><a href="sales_report.php">Sales Reports</a></li>
-                        <?php } ?>
-                    </ul>
                 </li>
+                <?php endif; ?>
+
+                <!-- Companies & Branches - available to users with company/branch management permission -->
+                <?php if ($can_manage_companies || $can_manage_branches): ?>
+                <li>
+                    <a href="companies.php">
+                        <i data-feather="briefcase"></i>
+                        <span data-key="t-components">Companies & Branches</span>
+                    </a>
+                </li>
+                <?php endif; ?>
+
+                <!-- User Management - available to users with user management permission -->
+                <?php if ($can_manage_users): ?>
+                <li>
+                    <a href="users.php">
+                        <i data-feather="users"></i>
+                        <span data-key="t-components">User Management</span>
+                    </a>
+                </li>
+                <?php endif; ?>
+
+                <!-- Admin-only menus -->
+                <?php if ($is_admin): ?>
+                <li>
+                    <a href="setup_subscription_cron.php">
+                        <i data-feather="clock"></i>
+                        <span data-key="t-components">Subscription Automation</span>
+                    </a>
+                </li>
+                <li>
+                    <a href="setup_permissions.php">
+                        <i data-feather="shield"></i>
+                        <span data-key="t-components">Setup Permissions</span>
+                    </a>
+                </li>
+                <?php endif; ?>
             </ul>
         </div>
         <!-- Sidebar -->
@@ -272,7 +309,7 @@ $is_admin = $permissions['isadmin'];
 </div>
 <!-- Left Sidebar End -->
  <!-- Feather Icons CDN -->
-<script src="https://unpkg.com/feather-icons"></script>
+<script src="https://cdn.jsdelivr.net/npm/feather-icons/dist/feather.min.js"></script>
 <script>
     feather.replace();
 </script>

@@ -1,6 +1,7 @@
 <?php include 'layouts/session.php'; ?>
 <?php include 'layouts/head-main.php'; ?>
 <?php include('layouts/config.php'); ?>
+<?php include('layouts/check_permission.php'); ?>
 
 <?php
 // Configuration and session handling
@@ -9,6 +10,17 @@ if (session_status() === PHP_SESSION_NONE) {
 }
 error_reporting(E_ALL);
 ini_set('display_errors', 1);
+
+// Check specific permissions for this page
+$can_manage_packages = has_permission('can_manage_packages', $pdo);
+$can_add_package = has_permission('can_add_package', $pdo) || has_permission('can_manage_packages', $pdo);
+
+// If user doesn't have permission to add packages, redirect them
+if (!$can_add_package) {
+    $_SESSION['error_message'] = "You don't have permission to add packages.";
+    header("Location: packages.php");
+    exit;
+}
 
 // Get branch ID (either from POST or GET)
 $branch_id = isset($_POST['branch_id']) ? $_POST['branch_id'] : 
@@ -52,6 +64,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['form_submitted'])) {
         'number_of_days' => $number_of_days,
         'branch_id' => $package_branch_id
     ]);
+    
+    // Update the session with the branch_id to maintain branch selection
+    $_SESSION['selected_branch_id'] = $package_branch_id;
+    
+    // Get branch name to update in session
+    $branch_query = "SELECT name FROM branches WHERE id = :branch_id";
+    $branch_stmt = $pdo->prepare($branch_query);
+    $branch_stmt->execute(['branch_id' => $package_branch_id]);
+    $branch_name = $branch_stmt->fetchColumn();
+    if ($branch_name) {
+        $_SESSION['selected_branch_name'] = $branch_name;
+    }
 
     // Redirect back to packages page for the same branch
     header("Location: packages.php?branch_id=" . $package_branch_id);
@@ -105,7 +129,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['form_submitted'])) {
                             </div>
                             <div class="card-body p-4">
 
-                                <form method="POST">
+                                <form method="POST" action="add_package.php?branch_id=<?php echo $branch_id; ?>">
                                     <div class="row">
                                         <div class="col-lg-6">
                                             <input type="hidden" name="form_submitted" value="1">

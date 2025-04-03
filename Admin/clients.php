@@ -1,7 +1,8 @@
 <?php
-// Enable error reporting
+// Enable detailed error reporting at the top of the file
 error_reporting(E_ALL);
 ini_set('display_errors', 1);
+error_log("Loading clients.php file");
 include 'layouts/session.php';
 include 'layouts/head-main.php';
 include 'layouts/config.php';
@@ -46,96 +47,85 @@ if (!$can_manage_clients) {
     exit;
 }
 
-// Get user's assigned branches
+// Get the user's assigned branches
 $branches_query = "SELECT b.* FROM branches b 
-                   JOIN user_branches ub ON b.id = ub.branch_id 
-                   WHERE ub.user_id = :user_id";
+                  JOIN user_branches ub ON b.id = ub.branch_id 
+                  WHERE ub.user_id = :user_id";
 $branches_stmt = $pdo->prepare($branches_query);
 $branches_stmt->execute(['user_id' => $user_id]);
 $user_branches = $branches_stmt->fetchAll(PDO::FETCH_ASSOC);
 
-// If user is admin but has no branches assigned, get all branches
-if (has_permission('isadmin', $pdo) && empty($user_branches)) {
+// If admin with no branches assigned, get all branches
+$isadmin_query = "SELECT isadmin FROM users WHERE id = :id";
+$isadmin_stmt = $pdo->prepare($isadmin_query);
+$isadmin_stmt->execute(['id' => $user_id]);
+$is_admin = $isadmin_stmt->fetchColumn();
+
+if ($is_admin && empty($user_branches)) {
     $branches_query = "SELECT * FROM branches";
     $branches_stmt = $pdo->prepare($branches_query);
     $branches_stmt->execute();
     $user_branches = $branches_stmt->fetchAll(PDO::FETCH_ASSOC);
 }
 
-// If there are no branches at all, create a default one
-if (empty($user_branches)) {
-    try {
-        $pdo->beginTransaction();
-        
-        // Check if any branches exist
-        $check_branches = "SELECT COUNT(*) FROM branches";
-        $check_stmt = $pdo->prepare($check_branches);
-        $check_stmt->execute();
-        $branch_count = $check_stmt->fetchColumn();
-        
-        if ($branch_count == 0) {
-            // Create default branch
-            $create_branch = "INSERT INTO branches (id, company_id, manager) VALUES (1, 1, 'Default Manager')";
-            $pdo->exec($create_branch);
-            
-            // Assign user to this branch
-            $assign_branch = "INSERT INTO user_branches (user_id, branch_id, assigned_by) VALUES (:user_id, 1, :user_id)";
-            $assign_stmt = $pdo->prepare($assign_branch);
-            $assign_stmt->execute(['user_id' => $user_id]);
-            
-            $pdo->commit();
-            
-            // Refresh the branches list
-            $branches_query = "SELECT * FROM branches WHERE id = 1";
-            $branches_stmt = $pdo->prepare($branches_query);
-            $branches_stmt->execute();
-            $user_branches = $branches_stmt->fetchAll(PDO::FETCH_ASSOC);
-        }
-    } catch (Exception $e) {
-        $pdo->rollBack();
-        die("Error creating default branch: " . $e->getMessage());
-    }
-}
-
-// Get the selected branch (from POST, GET, or default to the first branch)
+// Get the selected branch (from POST, GET, session, or default to the first branch)
 $selected_branch_id = null;
 
 if (isset($_POST['branch_id'])) {
     $selected_branch_id = $_POST['branch_id'];
 } elseif (isset($_GET['branch_id'])) {
     $selected_branch_id = $_GET['branch_id'];
+} elseif (isset($_SESSION['selected_branch_id'])) {
+    $selected_branch_id = $_SESSION['selected_branch_id'];
 } elseif (!empty($user_branches)) {
     $selected_branch_id = $user_branches[0]['id'];
 }
 
-// Get client statistics
+// Ensure we have a valid branch ID
+if (empty($selected_branch_id) && !empty($user_branches)) {
+    $selected_branch_id = $user_branches[0]['id'];
+} elseif (empty($selected_branch_id)) {
+    $selected_branch_id = 1; // Default to branch ID 1 if nothing else is available
+}
+
+// Store selected branch in session
+$_SESSION['selected_branch_id'] = $selected_branch_id;
+
+// Client Statistics with branch filtering
 $total_clients_query = "SELECT COUNT(*) as total FROM clients WHERE branch_id = :branch_id";
 $total_clients_stmt = $pdo->prepare($total_clients_query);
 $total_clients_stmt->execute(['branch_id' => $selected_branch_id]);
-$total_clients = $total_clients_stmt->fetch(PDO::FETCH_ASSOC)['total'];
+$total_clients = $total_clients_stmt->fetchColumn();
 
-$active_clients_query = "SELECT COUNT(*) as active FROM clients WHERE subscription_status = 'active' AND branch_id = :branch_id";
+$active_clients_query = "SELECT COUNT(*) as active FROM clients 
+                        WHERE subscription_status = 'active' 
+                        AND branch_id = :branch_id";
 $active_clients_stmt = $pdo->prepare($active_clients_query);
 $active_clients_stmt->execute(['branch_id' => $selected_branch_id]);
-$active_clients = $active_clients_stmt->fetch(PDO::FETCH_ASSOC)['active'];
+$active_clients = $active_clients_stmt->fetchColumn();
 
-$expiring_clients_query = "SELECT COUNT(*) as expiring FROM clients 
-                          WHERE subscription_end_date <= DATE_ADD(CURDATE(), INTERVAL 7 DAY) 
-                          AND subscription_status = 'active'
-                          AND branch_id = :branch_id";
+$expiring_clients_query = "SELECT COUNT(*) as ending_soon FROM clients 
+                           WHERE subscription_end_date <= DATE_ADD(CURDATE(), INTERVAL 3 DAY) 
+                           AND branch_id = :branch_id";
 $expiring_clients_stmt = $pdo->prepare($expiring_clients_query);
 $expiring_clients_stmt->execute(['branch_id' => $selected_branch_id]);
-$expiring_clients = $expiring_clients_stmt->fetch(PDO::FETCH_ASSOC)['expiring'];
+$expiring_clients = $expiring_clients_stmt->fetchColumn();
 
-$expired_clients_query = "SELECT COUNT(*) as expired FROM clients WHERE subscription_status = 'expired' AND branch_id = :branch_id";
+$expired_clients_query = "SELECT COUNT(*) as expired FROM clients 
+                          WHERE subscription_status = 'expired' 
+                          AND branch_id = :branch_id";
 $expired_clients_stmt = $pdo->prepare($expired_clients_query);
 $expired_clients_stmt->execute(['branch_id' => $selected_branch_id]);
-$expired_clients = $expired_clients_stmt->fetch(PDO::FETCH_ASSOC)['expired'];
+$expired_clients = $expired_clients_stmt->fetchColumn();
 
-$pending_payments_query = "SELECT COUNT(*) as pending FROM payments WHERE payment_status = 'Pending'";
+// Pending payments count
+$pending_payments_query = "SELECT COUNT(*) as pending_payments FROM clients c
+                          JOIN payments p ON c.client_id = p.client_id
+                          WHERE p.payment_status = 'Pending'
+                          AND c.branch_id = :branch_id";
 $pending_payments_stmt = $pdo->prepare($pending_payments_query);
-$pending_payments_stmt->execute();
-$pending_payments = $pending_payments_stmt->fetch(PDO::FETCH_ASSOC)['pending'];
+$pending_payments_stmt->execute(['branch_id' => $selected_branch_id]);
+$pending_payments = $pending_payments_stmt->fetchColumn();
 
 // Protect POST actions with permission checks
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['client_name']) && $can_add_client) {
@@ -387,29 +377,37 @@ if ($alert_check_stmt->rowCount() == 0) {
                     <div class="col-12">
                         <div class="card">
                             <div class="card-header d-flex justify-content-between align-items-center">
-                                <h4 class="card-title">Clients Table</h4>
-                                <div>
-                                    <a href="clients.php" class="btn btn-secondary">Show All Clients</a>
-                                    <a href="clients.php?filter=ending_soon" class="btn btn-warning">Show Subscriptions Ending Soon</a>
-                                    <a href="clients.php?filter=expired" class="btn btn-danger">Show Expired Clients</a>
-                                    <a href="clients.php?filter=pending_payments" class="btn btn-info">Show Pending Payments</a> <!-- New button added -->
-                                    <?php
-                                    if (isset($_GET['filter']) && $_GET['filter'] == 'ending_soon') {
-                                        $query = "SELECT * FROM clients WHERE subscription_end_date <= DATE_ADD(CURDATE(), INTERVAL 3 DAY)";
-                                    } elseif (isset($_GET['filter']) && $_GET['filter'] == 'expired') {
-                                        $query = "SELECT * FROM clients WHERE subscription_status = 'expired'";
-                                    } elseif (isset($_GET['filter']) && $_GET['filter'] == 'pending_payments') { // New filter condition
-                                        $query = "SELECT * FROM clients WHERE client_id IN (SELECT client_id FROM payments WHERE payment_status = 'pending')";
-                                    } else {
-                                        $query = "SELECT * FROM clients";
+                                <h4 class="card-title">
+                                    Clients Table
+                                    <?php 
+                                    // Show selected branch name
+                                    if ($selected_branch_id) {
+                                        $branch_name = '';
+                                        // Find branch name from user_branches
+                                        foreach ($user_branches as $branch) {
+                                            if ($branch['id'] == $selected_branch_id) {
+                                                $branch_name = isset($branch['name']) ? $branch['name'] : 
+                                                              (isset($branch['branch_name']) ? $branch['branch_name'] : 'Branch ' . $branch['id']);
+                                                break;
+                                            }
+                                        }
+                                                if (!empty($branch_name)) {
+                                                    echo ' - ' . htmlspecialchars($branch_name);
+                                                }
                                     }
                                     ?>
+                                </h4>
+                                <div>
+                                    <a href="clients.php?branch_id=<?php echo $selected_branch_id; ?>" class="btn btn-secondary">Show All Clients</a>
+                                    <a href="clients.php?filter=ending_soon&branch_id=<?php echo $selected_branch_id; ?>" class="btn btn-warning">Ending Soon</a>
+                                    <a href="clients.php?filter=expired&branch_id=<?php echo $selected_branch_id; ?>" class="btn btn-danger">Expired</a>
+                                    <a href="clients.php?filter=pending_payments&branch_id=<?php echo $selected_branch_id; ?>" class="btn btn-info">Pending Payments</a>
                                 </div>
                             </div>
                             <div class="card-body">
                                 <form method="POST" action="add_client.php" class="mb-4">
                                     <input type="hidden" name="branch_id" value="<?php echo $selected_branch_id; ?>">
-                                    <button type="submit" class="btn btn-primary" <?php if ($can_add_client == 0) echo 'style="pointer-events: none; opacity: 0.6;"'; ?>>
+                                    <button type="submit" class="btn btn-primary" <?php if (!$can_add_client) echo 'style="pointer-events: none; opacity: 0.6;"'; ?>>
                                         <i class="fas fa-plus me-2"></i> Add New Client
                                     </button>
                                 </form>
@@ -430,12 +428,17 @@ if ($alert_check_stmt->rowCount() == 0) {
                                         // Apply filters with branch_id
                                         if (isset($_GET['filter']) && $_GET['filter'] == 'ending_soon') {
                                             $query = "SELECT * FROM clients 
-                                                     WHERE subscription_end_date <= DATE_ADD(CURDATE(), INTERVAL 3 DAY)
-                                                     AND branch_id = :branch_id";
+                                                      WHERE subscription_end_date <= DATE_ADD(CURDATE(), INTERVAL 3 DAY)
+                                                      AND branch_id = :branch_id";
                                         } elseif (isset($_GET['filter']) && $_GET['filter'] == 'expired') {
                                             $query = "SELECT * FROM clients 
-                                                     WHERE subscription_status = 'expired'
-                                                     AND branch_id = :branch_id";
+                                                      WHERE subscription_status = 'expired'
+                                                      AND branch_id = :branch_id";
+                                        } elseif (isset($_GET['filter']) && $_GET['filter'] == 'pending_payments') {
+                                            $query = "SELECT c.* FROM clients c
+                                                      JOIN payments p ON c.client_id = p.client_id
+                                                      WHERE p.payment_status = 'Pending'
+                                                      AND c.branch_id = :branch_id";
                                         } else {
                                             $query = "SELECT * FROM clients WHERE branch_id = :branch_id";
                                         }
@@ -443,56 +446,63 @@ if ($alert_check_stmt->rowCount() == 0) {
                                         $stmt = $pdo->prepare($query);
                                         $stmt->execute(['branch_id' => $selected_branch_id]);
                                         $result = $stmt->fetchAll(PDO::FETCH_ASSOC);
-                                        if ($result) {
-                                            foreach ($result as $row) {
-                                                $client_id = htmlspecialchars($row['client_id']);
-                                                $pending_payment_query = "SELECT * FROM payments WHERE client_id = :client_id AND payment_status = 'pending'";
-                                                $pending_payment_stmt = $pdo->prepare($pending_payment_query);
-                                                $pending_payment_stmt->execute(['client_id' => $client_id]);
-                                                $has_pending_payment = $pending_payment_stmt->rowCount() > 0;
-                                                $pending_payment = $has_pending_payment ? $pending_payment_stmt->fetch(PDO::FETCH_ASSOC) : null;
-
-                                                echo "<tr>";
-                                                echo "<td>" . htmlspecialchars($row['name']);
-                                                if ($has_pending_payment) {
-                                                    echo " <span class='badge bg-warning'>Pending Payment: $" . htmlspecialchars($pending_payment['amount']) . "</span>";
-                                                }
-                                                echo "</td>";
-                                                echo "<td>" . htmlspecialchars($row['phone_number']) . "</td>";
-                                                echo "<td>" . htmlspecialchars($row['subscription_status']) . "</td>";
-                                                echo "<td>" . (!empty($row['subscription_end_date']) ? htmlspecialchars($row['subscription_end_date']) : 'Not set') . "</td>";
-                                                echo "<td>" . htmlspecialchars($row['created_at']) . "</td>";
-                                                echo "<td class='text-center'>";
-
-                                                // Edit Button
-                                                echo "<form method='POST' action='edit_client.php' style='display:inline-block;' onsubmit='return submitForm(this);'>";
-                                                echo "<input type='hidden' name='client_id' value='" . $client_id . "'>";
-                                                echo "<button type='submit' class='btn btn-success btn-sm action-button' " . ($can_edit_client == 0 ? 'style="pointer-events: none; opacity: 0.6;"' : '') . ">
-                                                        <i class='mdi mdi-pencil d-block font-size-16'></i>
-                                                      </button>";
-                                                echo "</form>";
-
-                                                // Delete Button with SweetAlert
-                                                echo "<button type='button' class='btn btn-danger btn-sm action-button sa-warning' data-id='" . $client_id . "' " . ($can_delete_client == 0 ? 'disabled' : '') . ">
-                                                        <i class='mdi mdi-trash-can d-block font-size-16'></i>
-                                                      </button>";
-
-                                                // Conditionally display either the Renew Subscription Button or Confirm Payment Button
-                                                if ($has_pending_payment) {
-                                                    echo "<button type='button' class='btn btn-warning btn-sm action-button confirm-payment' data-id='" . htmlspecialchars($pending_payment['payment_id']) . "'>
-                                                            <i class='mdi mdi-cash d-block font-size-16'></i>
-                                                          </button>";
-                                                } else {
-                                                    echo "<button type='button' class='btn btn-info btn-sm action-button renew-subscription' data-id='" . $client_id . "'>
-                                                            <i class='mdi mdi-refresh d-block font-size-16'></i>
-                                                          </button>";
-                                                }
-
-                                                echo "</td>";
-                                                echo "</tr>";
+                                        
+                                        foreach ($result as $row) {
+                                            $client_id = htmlspecialchars($row['client_id']);
+                                            
+                                            // Check for pending payments
+                                            $pending_payment_query = "SELECT * FROM payments WHERE client_id = :client_id AND payment_status = 'Pending'";
+                                            $pending_payment_stmt = $pdo->prepare($pending_payment_query);
+                                            $pending_payment_stmt->execute(['client_id' => $client_id]);
+                                            $has_pending_payment = $pending_payment_stmt->rowCount() > 0;
+                                            $pending_payment = $has_pending_payment ? $pending_payment_stmt->fetch(PDO::FETCH_ASSOC) : null;
+                                            
+                                            echo "<tr>";
+                                            echo "<td>" . htmlspecialchars($row['name']);
+                                            if ($has_pending_payment) {
+                                                echo " <span class='badge bg-warning'>Pending Payment: $" . htmlspecialchars($pending_payment['amount']) . "</span>";
                                             }
-                                        } else {
-                                            echo "<tr><td colspan='6'>No data found</td></tr>";
+                                            echo "</td>";
+                                            echo "<td>" . htmlspecialchars($row['phone_number']) . "</td>";
+                                            echo "<td>" . htmlspecialchars($row['subscription_status']) . "</td>";
+                                            echo "<td>" . (!empty($row['subscription_end_date']) ? htmlspecialchars($row['subscription_end_date']) : 'Not set') . "</td>";
+                                            echo "<td>" . htmlspecialchars($row['created_at']) . "</td>";
+                                            echo "<td class='text-center'>";
+                                            
+                                            // Edit Button
+                                            echo "<form method='POST' action='edit_client.php' style='display:inline-block;' onsubmit='return submitForm(this);'>";
+                                            echo "<input type='hidden' name='client_id' value='" . $client_id . "'>";
+                                            echo "<input type='hidden' name='branch_id' value='" . $selected_branch_id . "'>";
+                                            echo "<button type='submit' class='btn btn-success btn-sm action-button' " . 
+                                                 (isset($permissions['canedit']) && $permissions['canedit'] == 0 ? 'style="pointer-events: none; opacity: 0.6;"' : '') . ">
+                                                    <i class='mdi mdi-pencil d-block font-size-16'></i>
+                                                  </button>";
+                                            echo "</form>";
+                                            
+                                            // Delete Button with SweetAlert
+                                            echo "<button type='button' class='btn btn-danger btn-sm action-button delete-client-btn' data-id='" . $client_id . "' " . 
+                                                 (isset($permissions['candelete']) && $permissions['candelete'] == 0 ? 'disabled' : '') . ">
+                                                    <i class='mdi mdi-trash-can d-block font-size-16'></i>
+                                                  </button>";
+                                            
+                                            // View Button
+                                            echo "<a href='view_client.php?id=" . $client_id . "&branch_id=" . $selected_branch_id . "' class='btn btn-info btn-sm action-button'>
+                                                    <i class='mdi mdi-eye d-block font-size-16'></i>
+                                                  </a>";
+                                            
+                                            // Conditionally display either the Renew Subscription Button or Confirm Payment Button
+                                            if ($has_pending_payment) {
+                                                echo "<button type='button' class='btn btn-warning btn-sm action-button confirm-payment' data-id='" . htmlspecialchars($pending_payment['payment_id']) . "'>
+                                                        <i class='mdi mdi-cash d-block font-size-16'></i>
+                                                      </button>";
+                                            } else {
+                                                echo "<button type='button' class='btn btn-primary btn-sm action-button renew-subscription' data-id='" . $client_id . "'>
+                                                        <i class='mdi mdi-refresh d-block font-size-16'></i>
+                                                      </button>";
+                                            }
+                                            
+                                            echo "</td>";
+                                            echo "</tr>";
                                         }
                                         ?>
                                     </tbody>
@@ -603,8 +613,10 @@ if ($alert_check_stmt->rowCount() == 0) {
         });
         
         // SweetAlert for delete button
-        $('.sa-warning').on('click', function () {
+        $(document).on('click', '.delete-client-btn', function () {
             var clientId = $(this).data('id');
+            var branchId = <?php echo $selected_branch_id; ?>;
+            
             Swal.fire({
                 title: 'Are you sure?',
                 text: "You won't be able to revert this!",
@@ -615,7 +627,7 @@ if ($alert_check_stmt->rowCount() == 0) {
                 confirmButtonText: 'Yes, delete it!'
             }).then((result) => {
                 if (result.isConfirmed) {
-                    window.location.href = 'delete_client.php?id=' + clientId;
+                    window.location.href = 'delete_client.php?id=' + clientId + '&branch_id=' + branchId;
                 }
             });
         });
@@ -647,6 +659,11 @@ if ($alert_check_stmt->rowCount() == 0) {
                                 <option value="">Loading packages...</option>
                             </select>
                         </div>
+                        <div class="mb-3">
+                            <label for="startDate" class="form-label">Start Date</label>
+                            <input type="date" id="startDate" class="form-control" value="${new Date().toISOString().split('T')[0]}">
+                            <small class="text-muted">Default is today's date</small>
+                        </div>
                         <div id="packageDetails" class="alert alert-info mt-3" style="display: none;">
                             <div class="d-flex justify-content-between">
                                 <span>Price:</span>
@@ -655,6 +672,10 @@ if ($alert_check_stmt->rowCount() == 0) {
                             <div class="d-flex justify-content-between">
                                 <span>Duration:</span>
                                 <span id="packageDuration">0 days</span>
+                            </div>
+                            <div class="d-flex justify-content-between">
+                                <span>End Date:</span>
+                                <span id="calculatedEndDate">-</span>
                             </div>
                         </div>
                     </form>
@@ -669,6 +690,7 @@ if ($alert_check_stmt->rowCount() == 0) {
                     $.ajax({
                         url: 'ajax/get_packages.php',
                         type: 'GET',
+                        data: { branch_id: <?php echo $selected_branch_id; ?> },
                         dataType: 'json',
                         success: function(data) {
                             console.log('Packages loaded successfully:', data);
@@ -695,28 +717,37 @@ if ($alert_check_stmt->rowCount() == 0) {
                     
                     // Handle package change
                     $(document).on('change', '#package', updatePackageDetails);
+                    $(document).on('change', '#startDate', updatePackageDetails);
                     
                     function updatePackageDetails() {
                         var selectedOption = $('#package option:selected');
                         var price = selectedOption.data('price') || 0;
                         var days = selectedOption.data('days') || 0;
+                        var startDate = new Date($('#startDate').val());
+                        
+                        // Calculate end date
+                        var endDate = new Date(startDate);
+                        endDate.setDate(endDate.getDate() + days);
+                        var formattedEndDate = endDate.toISOString().split('T')[0];
                         
                         $('#packagePrice').text('$' + price.toFixed(2));
                         $('#packageDuration').text(days + ' days');
+                        $('#calculatedEndDate').text(formattedEndDate);
                         $('#packageDetails').show();
                     }
                 },
                 preConfirm: () => {
                     var packageId = $('#package').val();
+                    var startDate = $('#startDate').val();
                     
-                    console.log('Submitting renewal with package:', packageId);
+                    console.log('Submitting renewal with package:', packageId, 'start date:', startDate);
                     
                     if (!packageId) {
                         Swal.showValidationMessage('Please select a package');
                         return false;
                     }
                     
-                    return fetch(`renew_subscription.php?id=${clientId}&package=${packageId}`)
+                    return fetch(`renew_subscription.php?id=${clientId}&package=${packageId}&start_date=${startDate}&branch_id=<?php echo $selected_branch_id; ?>`)
                         .then(response => {
                             console.log('Renewal response status:', response.status);
                             if (!response.ok) {
@@ -742,7 +773,7 @@ if ($alert_check_stmt->rowCount() == 0) {
                 if (result.isConfirmed && result.value) {
                     Swal.fire({
                         title: 'Subscription Renewed',
-                        text: `New subscription created and payment of $${result.value.amount} recorded.`,
+                        text: `New subscription created with start date ${result.value.start_date} and payment of $${result.value.amount} recorded.`,
                         icon: 'success'
                     }).then(() => {
                         location.reload();

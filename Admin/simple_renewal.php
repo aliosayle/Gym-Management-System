@@ -21,7 +21,10 @@ if (!isset($_GET['id'])) {
 $client_id = $_GET['id'];
 
 // Fetch client information
-$client_query = "SELECT * FROM clients WHERE client_id = :client_id";
+$client_query = "SELECT c.*, b.name as branch_name 
+                FROM clients c 
+                LEFT JOIN branches b ON c.branch_id = b.id 
+                WHERE c.client_id = :client_id";
 $client_stmt = $pdo->prepare($client_query);
 $client_stmt->execute(['client_id' => $client_id]);
 $client = $client_stmt->fetch(PDO::FETCH_ASSOC);
@@ -31,10 +34,13 @@ if (!$client) {
     exit;
 }
 
-// Fetch packages
-$packages_query = "SELECT * FROM packages ORDER BY price ASC";
+// Get branch_id from client or from GET parameter
+$branch_id = isset($_GET['branch_id']) ? $_GET['branch_id'] : $client['branch_id'];
+
+// Fetch packages for this branch
+$packages_query = "SELECT * FROM packages WHERE branch_id = :branch_id ORDER BY price ASC";
 $packages_stmt = $pdo->prepare($packages_query);
-$packages_stmt->execute();
+$packages_stmt->execute(['branch_id' => $branch_id]);
 $packages = $packages_stmt->fetchAll(PDO::FETCH_ASSOC);
 
 // Handle form submission
@@ -45,7 +51,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $error = "Please select a package";
     } else {
         // Redirect to the renewal script with parameters
-        header("Location: renew_subscription.php?id=$client_id&package=$package_id");
+        header("Location: renew_subscription.php?id=$client_id&package=$package_id&branch_id=$branch_id");
         exit;
     }
 }
@@ -132,7 +138,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                     </div>
                                     
                                     <div class="d-grid gap-2 d-md-flex justify-content-md-end">
-                                        <a href="clients.php" class="btn btn-secondary me-md-2">Cancel</a>
+                                        <a href="clients.php?branch_id=<?php echo $branch_id; ?>" class="btn btn-secondary me-md-2">Cancel</a>
                                         <button type="submit" class="btn btn-primary">Renew Subscription</button>
                                     </div>
                                 </form>

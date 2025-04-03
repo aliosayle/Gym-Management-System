@@ -43,6 +43,50 @@ $canedit = (int) $permissions['canedit']; // Cast to integer (either 0 or 1)
 $candelete = (int) $permissions['candelete']; // Cast to integer (either 0 or 1)
 $canadd = (int) $permissions['canadd']; // Cast to integer (either 0 or 1)
 
+// Get the user's assigned branches
+$branches_query = "SELECT b.* FROM branches b 
+                  JOIN user_branches ub ON b.id = ub.branch_id 
+                  WHERE ub.user_id = :user_id";
+$branches_stmt = $pdo->prepare($branches_query);
+$branches_stmt->execute(['user_id' => $user_id]);
+$user_branches = $branches_stmt->fetchAll(PDO::FETCH_ASSOC);
+
+// If admin with no branches assigned, get all branches
+$isadmin_query = "SELECT isadmin FROM users WHERE id = :id";
+$isadmin_stmt = $pdo->prepare($isadmin_query);
+$isadmin_stmt->execute(['id' => $user_id]);
+$is_admin = $isadmin_stmt->fetchColumn();
+
+if ($is_admin && empty($user_branches)) {
+    $branches_query = "SELECT * FROM branches";
+    $branches_stmt = $pdo->prepare($branches_query);
+    $branches_stmt->execute();
+    $user_branches = $branches_stmt->fetchAll(PDO::FETCH_ASSOC);
+}
+
+// Get the selected branch (from POST, GET, session, or default to the first branch)
+$selected_branch_id = null;
+
+if (isset($_POST['branch_id'])) {
+    $selected_branch_id = $_POST['branch_id'];
+} elseif (isset($_GET['branch_id'])) {
+    $selected_branch_id = $_GET['branch_id'];
+} elseif (isset($_SESSION['selected_branch_id'])) {
+    $selected_branch_id = $_SESSION['selected_branch_id'];
+} elseif (!empty($user_branches)) {
+    $selected_branch_id = $user_branches[0]['id'];
+}
+
+// Ensure we have a valid branch ID
+if (empty($selected_branch_id) && !empty($user_branches)) {
+    $selected_branch_id = $user_branches[0]['id'];
+} elseif (empty($selected_branch_id)) {
+    $selected_branch_id = 1; // Default to branch ID 1 if nothing else is available
+}
+
+// Store selected branch in session
+$_SESSION['selected_branch_id'] = $selected_branch_id;
+
 // Get inventory statistics
 $total_products = 0;
 $total_value = 0;
@@ -51,20 +95,28 @@ $out_of_stock_count = 0;
 
 try {
     // Total products count
-    $count_query = "SELECT COUNT(*) FROM products";
-    $total_products = $pdo->query($count_query)->fetchColumn();
+    $count_query = "SELECT COUNT(*) FROM products WHERE branch_id = :branch_id";
+    $count_stmt = $pdo->prepare($count_query);
+    $count_stmt->execute(['branch_id' => $selected_branch_id]);
+    $total_products = $count_stmt->fetchColumn();
     
     // Total inventory value
-    $value_query = "SELECT SUM(price * quantity_in_stock) FROM products";
-    $total_value = $pdo->query($value_query)->fetchColumn() ?: 0;
+    $value_query = "SELECT SUM(price * quantity_in_stock) FROM products WHERE branch_id = :branch_id";
+    $value_stmt = $pdo->prepare($value_query);
+    $value_stmt->execute(['branch_id' => $selected_branch_id]);
+    $total_value = $value_stmt->fetchColumn() ?: 0;
     
     // Low stock count (less than 10 items)
-    $low_stock_query = "SELECT COUNT(*) FROM products WHERE quantity_in_stock BETWEEN 1 AND 10";
-    $low_stock_count = $pdo->query($low_stock_query)->fetchColumn();
+    $low_stock_query = "SELECT COUNT(*) FROM products WHERE quantity_in_stock BETWEEN 1 AND 10 AND branch_id = :branch_id";
+    $low_stock_stmt = $pdo->prepare($low_stock_query);
+    $low_stock_stmt->execute(['branch_id' => $selected_branch_id]);
+    $low_stock_count = $low_stock_stmt->fetchColumn();
     
     // Out of stock count
-    $out_of_stock_query = "SELECT COUNT(*) FROM products WHERE quantity_in_stock = 0";
-    $out_of_stock_count = $pdo->query($out_of_stock_query)->fetchColumn();
+    $out_of_stock_query = "SELECT COUNT(*) FROM products WHERE quantity_in_stock = 0 AND branch_id = :branch_id";
+    $out_stock_stmt = $pdo->prepare($out_of_stock_query);
+    $out_stock_stmt->execute(['branch_id' => $selected_branch_id]);
+    $out_of_stock_count = $out_stock_stmt->fetchColumn();
 } catch (PDOException $e) {
     error_log("Error getting inventory statistics: " . $e->getMessage());
 }
@@ -75,9 +127,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['product_name']) && $c
     $description = $_POST['description'];
     $price = $_POST['price'];
     $quantity_in_stock = (int)$_POST['quantity_in_stock'];
-    $insert_query = "INSERT INTO products (name, description, price, quantity_in_stock) VALUES (:product_name, :description, :price, :quantity_in_stock)";
+    $insert_query = "INSERT INTO products (name, description, price, quantity_in_stock, branch_id) 
+                    VALUES (:product_name, :description, :price, :quantity_in_stock, :branch_id)";
     $insert_stmt = $pdo->prepare($insert_query);
-    if ($insert_stmt->execute(['product_name' => $product_name, 'description' => $description, 'price' => $price, 'quantity_in_stock' => $quantity_in_stock])) {
+    if ($insert_stmt->execute([
+        'product_name' => $product_name, 
+        'description' => $description, 
+        'price' => $price, 
+        'quantity_in_stock' => $quantity_in_stock,
+        'branch_id' => $selected_branch_id
+    ])) {
         echo "<script>alert('New product added successfully');</script>";
     } else {
         echo "<script>alert('Error adding product: " . implode(", ", $insert_stmt->errorInfo()) . "');</script>";
@@ -187,7 +246,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['product_name']) && $c
                 <div class="row">
                     <div class="col-12">
                         <div class="page-title-box d-sm-flex align-items-center justify-content-between">
-                            <h4 class="mb-sm-0 font-size-18">Inventory Management</h4>
+                            <h4 class="mb-sm-0 font-size-18">
+                                Inventory Management
+                                <?php 
+                                // Show selected branch name
+                                if ($selected_branch_id) {
+                                    $branch_name = '';
+                                    foreach ($user_branches as $branch) {
+                                        if ($branch['id'] == $selected_branch_id) {
+                                            $branch_name = isset($branch['name']) ? $branch['name'] : 
+                                                        (isset($branch['branch_name']) ? $branch['branch_name'] : 'Branch ' . $branch['id']);
+                                            break;
+                                        }
+                                    }
+                                    if (!empty($branch_name)) {
+                                        echo ' - ' . htmlspecialchars($branch_name);
+                                    }
+                                }
+                                ?>
+                            </h4>
                             <div class="page-title-right">
                                 <ol class="breadcrumb m-0">
                                     <li class="breadcrumb-item"><a href="index.php">Dashboard</a></li>
@@ -285,7 +362,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['product_name']) && $c
                                 <div class="d-flex justify-content-between align-items-center mb-3">
                                     <h4 class="card-title mb-0">Inventory Management</h4>
                                     <div>
-                                        <a href="add_product.php" class="btn btn-primary" <?php if ($canadd == 0) echo 'style="pointer-events: none; opacity: 0.6;"'; ?>>
+                                        <a href="add_product.php?branch_id=<?php echo $selected_branch_id; ?>" class="btn btn-primary" <?php if ($canadd == 0) echo 'disabled'; ?>>
                                     <i class="fas fa-plus me-2"></i> Add New Product
                                 </a>
                                         <button type="button" class="btn btn-success ms-2" id="btnExportInventory">
@@ -330,10 +407,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['product_name']) && $c
 
                 <!-- Products Grid -->
                 <div class="row" id="productsGrid">
-                                        <?php 
-                    $query = "SELECT * FROM products ORDER BY name ASC";
-                                        $stmt = $pdo->prepare($query);
-                                        $stmt->execute();
+                    <?php 
+                    $query = "SELECT * FROM products WHERE branch_id = :branch_id ORDER BY name ASC";
+                    $stmt = $pdo->prepare($query);
+                    $stmt->execute(['branch_id' => $selected_branch_id]);
                     $products = $stmt->fetchAll(PDO::FETCH_ASSOC);
                     
                     if ($products) {
@@ -380,7 +457,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['product_name']) && $c
                                     
                                     <!-- Edit & Delete -->
                                     <div class="mt-2">
-                                        <form method="POST" action="edit_product.php?id=<?php echo $product['product_id']; ?>" style="display:inline-block;" onsubmit="return submitForm(this);">
+                                        <form method="POST" action="edit_product.php?id=<?php echo $product['product_id']; ?>&branch_id=<?php echo $selected_branch_id; ?>" style="display:inline-block;" onsubmit="return submitForm(this);">
                                             <input type="hidden" name="product_id" value="<?php echo htmlspecialchars($product['product_id']); ?>">
                                             <button type="submit" class="btn btn-warning btn-sm" <?php if ($canedit == 0) echo 'disabled'; ?>>
                                                 <i class="fas fa-edit"></i> Edit
@@ -700,6 +777,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['product_name']) && $c
         $(".delete-product").on("click", function() {
             var productId = $(this).data("id");
             var productName = $(this).data("name");
+            var branchId = <?php echo $selected_branch_id; ?>;
             
             Swal.fire({
                 title: 'Are you sure?',
@@ -711,7 +789,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['product_name']) && $c
                 confirmButtonText: 'Yes, delete it!'
             }).then((result) => {
                 if (result.isConfirmed) {
-                    window.location.href = 'delete_product.php?id=' + productId;
+                    window.location.href = 'delete_product.php?id=' + productId + '&branch_id=' + branchId;
                 }
             });
         });

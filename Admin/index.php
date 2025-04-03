@@ -7,6 +7,87 @@ if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
+// Get the selected branch ID from session
+$selected_branch_id = null;
+
+if (isset($_POST['branch_id'])) {
+    $selected_branch_id = $_POST['branch_id'];
+} elseif (isset($_GET['branch_id'])) {
+    $selected_branch_id = $_GET['branch_id'];
+} elseif (isset($_SESSION['selected_branch_id'])) {
+    $selected_branch_id = $_SESSION['selected_branch_id'];
+} elseif (isset($user_branches) && !empty($user_branches)) {
+    $selected_branch_id = $user_branches[0]['id'];
+}
+
+// Ensure we have a valid branch ID
+if (empty($selected_branch_id) && isset($user_branches) && !empty($user_branches)) {
+    $selected_branch_id = $user_branches[0]['id'];
+} elseif (empty($selected_branch_id)) {
+    $selected_branch_id = 1; // Default to branch ID 1 if nothing else is available
+}
+
+// Store selected branch in session
+$_SESSION['selected_branch_id'] = $selected_branch_id;
+
+// Get branch name for display
+$branch_name = "";
+if (!empty($selected_branch_id)) {
+    try {
+        $branch_query = "SELECT name FROM branches WHERE id = ?";
+        $branch_stmt = $pdo->prepare($branch_query);
+        $branch_stmt->execute([$selected_branch_id]);
+        $branch = $branch_stmt->fetch(PDO::FETCH_ASSOC);
+        if ($branch) {
+            $branch_name = $branch['name'];
+            $_SESSION['selected_branch_name'] = $branch_name;
+        }
+    } catch (PDOException $e) {
+        error_log("Error fetching branch name: " . $e->getMessage());
+    }
+}
+
+// Get current date information
+$current_date = date('Y-m-d');
+$current_month = date('m');
+$current_year = date('Y');
+$thirty_days_ago = date('Y-m-d', strtotime('-30 days'));
+$previous_month = date('m', strtotime('-1 month'));
+$previous_month_year = date('Y', strtotime('-1 month'));
+
+// Calculate separate subscription and POS revenue for current month
+$subscription_month_query = "SELECT COALESCE(SUM(amount), 0) as revenue 
+                          FROM payments 
+                          WHERE payment_status = 'completed' 
+                          AND MONTH(payment_date) = :current_month 
+                          AND YEAR(payment_date) = :current_year
+                          AND branch_id = :branch_id";
+$subscription_month_stmt = $pdo->prepare($subscription_month_query);
+$subscription_month_stmt->execute([
+    'current_month' => $current_month,
+    'current_year' => $current_year,
+    'branch_id' => $selected_branch_id
+]);
+$subscription_month_revenue = $subscription_month_stmt->fetchColumn() ?: 0;
+
+$pos_month_query = "SELECT COALESCE(SUM(total_amount), 0) as revenue 
+                  FROM sales 
+                  WHERE MONTH(sale_date) = :current_month 
+                  AND YEAR(sale_date) = :current_year
+                  AND branch_id = :branch_id";
+$pos_month_stmt = $pdo->prepare($pos_month_query);
+$pos_month_stmt->execute([
+    'current_month' => $current_month,
+    'current_year' => $current_year,
+    'branch_id' => $selected_branch_id
+]);
+$pos_month_revenue = $pos_month_stmt->fetchColumn() ?: 0;
+
+// Calculate percentage of each revenue source
+$total_month_revenue = $subscription_month_revenue + $pos_month_revenue;
+$subscription_percentage = $total_month_revenue > 0 ? round(($subscription_month_revenue / $total_month_revenue) * 100) : 0;
+$pos_percentage = $total_month_revenue > 0 ? round(($pos_month_revenue / $total_month_revenue) * 100) : 0;
+
 // Check if user is admin
 $user_id = $_SESSION['id']; // Assuming user_id is stored in session
 $admin_check_query = "SELECT isadmin, canadd, candelete, canedit FROM users WHERE id = :id";
@@ -21,82 +102,117 @@ if ($isadmin != 1) {
 
 // Fetch key metrics for the dashboard
 try {
-    // Total Active Clients
-    $active_clients_query = "SELECT COUNT(*) FROM clients WHERE subscription_status = 'active'";
-    $active_clients_stmt = $pdo->query($active_clients_query);
+    // Total Active Clients - filtered by branch_id
+    $active_clients_query = "SELECT COUNT(*) FROM clients WHERE subscription_status = 'active' AND branch_id = :branch_id";
+    $active_clients_stmt = $pdo->prepare($active_clients_query);
+    $active_clients_stmt->execute(['branch_id' => $selected_branch_id]);
     $active_clients_count = $active_clients_stmt->fetchColumn() ?: 0;
 
-    // Total Clients (both active and inactive)
-    $total_clients_query = "SELECT COUNT(*) FROM clients";
-    $total_clients_stmt = $pdo->query($total_clients_query);
+    // Total Clients (both active and inactive) - filtered by branch_id
+    $total_clients_query = "SELECT COUNT(*) FROM clients WHERE branch_id = :branch_id";
+    $total_clients_stmt = $pdo->prepare($total_clients_query);
+    $total_clients_stmt->execute(['branch_id' => $selected_branch_id]);
     $total_clients_count = $total_clients_stmt->fetchColumn() ?: 0;
 
-    // Subscriptions ending in the next 7 days
+    // Subscriptions ending in the next 7 days - filtered by branch_id
     $ending_soon_query = "SELECT COUNT(*) FROM clients 
                           WHERE subscription_end_date <= DATE_ADD(CURDATE(), INTERVAL 7 DAY) 
                           AND subscription_end_date >= CURDATE()
-                          AND subscription_status = 'active'";
-    $ending_soon_stmt = $pdo->query($ending_soon_query);
+                          AND subscription_status = 'active' 
+                          AND branch_id = :branch_id";
+    $ending_soon_stmt = $pdo->prepare($ending_soon_query);
+    $ending_soon_stmt->execute(['branch_id' => $selected_branch_id]);
     $ending_soon_count = $ending_soon_stmt->fetchColumn() ?: 0;
 
-    // Expired subscriptions
+    // Expired subscriptions - filtered by branch_id
     $expired_query = "SELECT COUNT(*) FROM clients 
-                      WHERE (subscription_end_date < CURDATE() OR subscription_status = 'expired')";
-    $expired_stmt = $pdo->query($expired_query);
+                      WHERE (subscription_end_date < CURDATE() OR subscription_status = 'expired')
+                      AND branch_id = :branch_id";
+    $expired_stmt = $pdo->prepare($expired_query);
+    $expired_stmt->execute(['branch_id' => $selected_branch_id]);
     $expired_count = $expired_stmt->fetchColumn() ?: 0;
 
-    // Pending payments total
+    // Pending payments total - filtered by branch_id
     $pending_payments_query = "SELECT COUNT(*) as count, COALESCE(SUM(amount), 0) as total 
                               FROM payments 
-                              WHERE payment_status = 'pending'";
-    $pending_payments_stmt = $pdo->query($pending_payments_query);
+                              WHERE payment_status = 'pending'
+                              AND branch_id = :branch_id";
+    $pending_payments_stmt = $pdo->prepare($pending_payments_query);
+    $pending_payments_stmt->execute(['branch_id' => $selected_branch_id]);
     $pending_payments = $pending_payments_stmt->fetch(PDO::FETCH_ASSOC);
     $pending_payments_count = $pending_payments['count'] ?: 0;
     $pending_payments_total = $pending_payments['total'] ?: 0;
 
-    // Current date
-    $current_date = date('Y-m-d');
-    $current_month = date('m');
-    $current_year = date('Y');
-    $thirty_days_ago = date('Y-m-d', strtotime('-30 days'));
-    $previous_month = date('m', strtotime('-1 month'));
-    $previous_month_year = date('Y', strtotime('-1 month'));
-
-    // Revenue Data - Last 30 days
-    $monthly_revenue_query = "SELECT COALESCE(SUM(amount), 0) as revenue 
-                              FROM payments 
-                              WHERE payment_status = 'completed' 
-                              AND payment_date BETWEEN :thirty_days_ago AND :current_date";
+    // Revenue Data - Last 30 days - filtered by branch_id (combined subscription + POS)
+    $monthly_revenue_query = "SELECT 
+                               (
+                                   SELECT COALESCE(SUM(amount), 0) 
+                                   FROM payments 
+                                   WHERE payment_status = 'completed' 
+                                   AND payment_date BETWEEN :thirty_days_ago AND :current_date
+                                   AND branch_id = :branch_id
+                               ) +
+                               (
+                                   SELECT COALESCE(SUM(total_amount), 0) 
+                                   FROM sales 
+                                   WHERE sale_date BETWEEN :thirty_days_ago AND :current_date
+                                   AND branch_id = :branch_id
+                               ) as revenue";
     $monthly_revenue_stmt = $pdo->prepare($monthly_revenue_query);
     $monthly_revenue_stmt->execute([
         'thirty_days_ago' => $thirty_days_ago,
-        'current_date' => $current_date
+        'current_date' => $current_date,
+        'branch_id' => $selected_branch_id
     ]);
     $monthly_revenue = $monthly_revenue_stmt->fetchColumn() ?: 0;
 
-    // Revenue Data - Current Month
-    $current_month_query = "SELECT COALESCE(SUM(amount), 0) as revenue 
-                           FROM payments 
-                           WHERE payment_status = 'completed' 
-                           AND MONTH(payment_date) = :current_month 
-                           AND YEAR(payment_date) = :current_year";
+    // Revenue Data - Current Month - filtered by branch_id (combined subscription + POS)
+    $current_month_query = "SELECT 
+                             (
+                                 SELECT COALESCE(SUM(amount), 0) 
+                                 FROM payments 
+                                 WHERE payment_status = 'completed' 
+                                 AND MONTH(payment_date) = :current_month 
+                                 AND YEAR(payment_date) = :current_year
+                                 AND branch_id = :branch_id
+                             ) +
+                             (
+                                 SELECT COALESCE(SUM(total_amount), 0) 
+                                 FROM sales 
+                                 WHERE MONTH(sale_date) = :current_month 
+                                 AND YEAR(sale_date) = :current_year
+                                 AND branch_id = :branch_id
+                             ) as revenue";
     $current_month_stmt = $pdo->prepare($current_month_query);
     $current_month_stmt->execute([
         'current_month' => $current_month,
-        'current_year' => $current_year
+        'current_year' => $current_year,
+        'branch_id' => $selected_branch_id
     ]);
     $current_month_revenue = $current_month_stmt->fetchColumn() ?: 0;
 
-    // Revenue Data - Previous Month
-    $prev_month_query = "SELECT COALESCE(SUM(amount), 0) as revenue 
-                        FROM payments 
-                        WHERE payment_status = 'completed' 
-                        AND MONTH(payment_date) = :previous_month 
-                        AND YEAR(payment_date) = :previous_month_year";
+    // Revenue Data - Previous Month - filtered by branch_id (combined subscription + POS)
+    $prev_month_query = "SELECT 
+                          (
+                              SELECT COALESCE(SUM(amount), 0) 
+                              FROM payments 
+                              WHERE payment_status = 'completed' 
+                              AND MONTH(payment_date) = :previous_month 
+                              AND YEAR(payment_date) = :previous_month_year
+                              AND branch_id = :branch_id
+                          ) +
+                          (
+                              SELECT COALESCE(SUM(total_amount), 0) 
+                              FROM sales 
+                              WHERE MONTH(sale_date) = :previous_month 
+                              AND YEAR(sale_date) = :previous_month_year
+                              AND branch_id = :branch_id
+                          ) as revenue";
     $prev_month_stmt = $pdo->prepare($prev_month_query);
     $prev_month_stmt->execute([
         'previous_month' => $previous_month,
-        'previous_month_year' => $previous_month_year
+        'previous_month_year' => $previous_month_year,
+        'branch_id' => $selected_branch_id
     ]);
     $prev_month_revenue = $prev_month_stmt->fetchColumn() ?: 0;
 
@@ -104,16 +220,29 @@ try {
     $revenue_growth = $prev_month_revenue > 0 ? 
         round((($current_month_revenue - $prev_month_revenue) / $prev_month_revenue) * 100, 1) : 0;
 
-    // Total Sales Today
-    $today_sales_query = "SELECT COALESCE(SUM(amount), 0) FROM payments 
-                          WHERE payment_status = 'completed' 
-                          AND DATE(payment_date) = CURDATE()";
-    $today_sales_stmt = $pdo->query($today_sales_query);
+    // Total Sales Today - filtered by branch_id (combined subscription + POS)
+    $today_sales_query = "SELECT 
+                           (
+                               SELECT COALESCE(SUM(amount), 0) 
+                               FROM payments 
+                               WHERE payment_status = 'completed' 
+                               AND DATE(payment_date) = CURDATE()
+                               AND branch_id = :branch_id
+                           ) +
+                           (
+                               SELECT COALESCE(SUM(total_amount), 0) 
+                               FROM sales 
+                               WHERE DATE(sale_date) = CURDATE()
+                               AND branch_id = :branch_id
+                           ) as total";
+    $today_sales_stmt = $pdo->prepare($today_sales_query);
+    $today_sales_stmt->execute(['branch_id' => $selected_branch_id]);
     $today_sales = $today_sales_stmt->fetchColumn() ?: 0;
 
     // For Chart: Create last 12 months' date labels
     $chart_labels = [];
-    $revenue_data = [];
+    $revenue_data_subscriptions = [];
+    $revenue_data_pos = [];
     $transaction_data = [];
     
     // Generate last 12 months
@@ -125,31 +254,53 @@ try {
         $month = date('m', strtotime($month_date));
         $year = date('Y', strtotime($month_date));
         
-        // Query revenue for this month
-        $month_revenue_query = "SELECT COALESCE(SUM(amount), 0) as revenue, COUNT(*) as count 
-                               FROM payments 
-                               WHERE payment_status = 'completed' 
-                               AND MONTH(payment_date) = :month 
-                               AND YEAR(payment_date) = :year";
-        $month_revenue_stmt = $pdo->prepare($month_revenue_query);
-        $month_revenue_stmt->execute(['month' => $month, 'year' => $year]);
-        $month_data = $month_revenue_stmt->fetch(PDO::FETCH_ASSOC);
+        // Query subscription revenue for this month
+        $sub_revenue_query = "SELECT COALESCE(SUM(amount), 0) as revenue, COUNT(*) as count 
+                             FROM payments 
+                             WHERE payment_status = 'completed' 
+                             AND MONTH(payment_date) = :month 
+                             AND YEAR(payment_date) = :year
+                             AND branch_id = :branch_id";
+        $sub_revenue_stmt = $pdo->prepare($sub_revenue_query);
+        $sub_revenue_stmt->execute([
+            'month' => $month, 
+            'year' => $year,
+            'branch_id' => $selected_branch_id
+        ]);
+        $sub_data = $sub_revenue_stmt->fetch(PDO::FETCH_ASSOC);
         
-        $revenue_data[] = floatval($month_data['revenue'] ?: 0);
-        $transaction_data[] = intval($month_data['count'] ?: 0);
+        // Query POS sales revenue for this month
+        $pos_revenue_query = "SELECT COALESCE(SUM(total_amount), 0) as revenue, COUNT(*) as count 
+                             FROM sales 
+                             WHERE MONTH(sale_date) = :month 
+                             AND YEAR(sale_date) = :year
+                             AND branch_id = :branch_id";
+        $pos_revenue_stmt = $pdo->prepare($pos_revenue_query);
+        $pos_revenue_stmt->execute([
+            'month' => $month, 
+            'year' => $year,
+            'branch_id' => $selected_branch_id
+        ]);
+        $pos_data = $pos_revenue_stmt->fetch(PDO::FETCH_ASSOC);
+        
+        $revenue_data_subscriptions[] = floatval($sub_data['revenue'] ?: 0);
+        $revenue_data_pos[] = floatval($pos_data['revenue'] ?: 0);
+        $transaction_data[] = intval($sub_data['count'] + $pos_data['count'] ?: 0);
     }
 
-    // Get popular packages
+    // Get popular packages - filtered by branch_id through clients table
     $packages_query = "SELECT 
                           p.name as package_name,
                           COUNT(c.client_id) as client_count,
                           p.price
                        FROM packages p
-                       LEFT JOIN clients c ON p.id = c.package_id
+                       LEFT JOIN clients c ON p.id = c.package_id AND c.branch_id = :branch_id
                        GROUP BY p.id, p.name, p.price
+                       HAVING client_count > 0
                        ORDER BY client_count DESC
                        LIMIT 5";
-    $packages_stmt = $pdo->query($packages_query);
+    $packages_stmt = $pdo->prepare($packages_query);
+    $packages_stmt->execute(['branch_id' => $selected_branch_id]);
     $popular_packages = $packages_stmt->fetchAll(PDO::FETCH_ASSOC);
     
     // If no packages, provide empty array to prevent warnings
@@ -157,7 +308,7 @@ try {
         $popular_packages = [];
     }
 
-    // Recent activity - last 10 payments, ordered from most recent
+    // Recent activity - last 10 payments, ordered from most recent - filtered by branch_id
     $recent_activity_query = "SELECT 
                                 p.payment_id,
                                 p.payment_date,
@@ -168,9 +319,11 @@ try {
                               FROM payments p
                               JOIN clients c ON p.client_id = c.client_id
                               JOIN packages pkg ON p.package_id = pkg.id
+                              WHERE p.branch_id = :branch_id
                               ORDER BY p.payment_date DESC
                               LIMIT 10";
-    $recent_activity_stmt = $pdo->query($recent_activity_query);
+    $recent_activity_stmt = $pdo->prepare($recent_activity_query);
+    $recent_activity_stmt->execute(['branch_id' => $selected_branch_id]);
     $recent_activity = $recent_activity_stmt->fetchAll(PDO::FETCH_ASSOC);
     
     // If no activity, provide empty array to prevent warnings
@@ -203,7 +356,8 @@ try {
     $revenue_growth = 0;
     $today_sales = 0;
     $chart_labels = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    $revenue_data = array_fill(0, 12, 0);
+    $revenue_data_subscriptions = array_fill(0, 12, 0);
+    $revenue_data_pos = array_fill(0, 12, 0);
     $transaction_data = array_fill(0, 12, 0);
     $popular_packages = [];
     $recent_activity = [];
@@ -676,12 +830,17 @@ try {
                 <div class="row">
                     <div class="col-12">
                         <div class="page-title-box d-sm-flex align-items-center justify-content-between">
-                            <h4 class="mb-sm-0 font-size-18">Dashboard</h4>
+                            <h4 class="mb-sm-0 font-size-18">
+                                Dashboard
+                                <?php if (!empty($branch_name)): ?>
+                                    - <?php echo htmlspecialchars($branch_name); ?>
+                                <?php endif; ?>
+                            </h4>
 
                             <div class="page-title-right">
                                 <ol class="breadcrumb m-0">
-                                    <li class="breadcrumb-item"><a href="javascript: void(0);">Home</a></li>
-                                    <li class="breadcrumb-item active">Dashboard</li>
+                                    <li class="breadcrumb-item"><a href="javascript: void(0);">Dashboard</a></li>
+                                    <li class="breadcrumb-item active">Home</li>
                                 </ol>
                             </div>
                         </div>
@@ -869,6 +1028,31 @@ try {
                                         <span>Active Rate: <?php echo round(($active_clients_count / ($total_clients_count ?: 1)) * 100); ?>%</span>
                                     </div>
                                 </div>
+                                
+                                <!-- Revenue Breakdown Card -->
+                                <div class="card mt-3 mb-3">
+                                    <div class="card-body p-3">
+                                        <h5 class="mb-3 fs-15">Revenue Breakdown (This Month)</h5>
+                                        <div class="d-flex justify-content-between mb-2">
+                                            <span>Subscriptions</span>
+                                            <span>$<?php echo number_format($subscription_month_revenue, 2); ?> (<?php echo $subscription_percentage; ?>%)</span>
+                                        </div>
+                                        <div class="progress mb-3" style="height: 8px;">
+                                            <div class="progress-bar bg-primary" role="progressbar" style="width: <?php echo $subscription_percentage; ?>%" 
+                                                aria-valuenow="<?php echo $subscription_percentage; ?>" aria-valuemin="0" aria-valuemax="100"></div>
+                                        </div>
+                                        
+                                        <div class="d-flex justify-content-between mb-2">
+                                            <span>POS Sales</span>
+                                            <span>$<?php echo number_format($pos_month_revenue, 2); ?> (<?php echo $pos_percentage; ?>%)</span>
+                                        </div>
+                                        <div class="progress" style="height: 8px;">
+                                            <div class="progress-bar bg-warning" role="progressbar" style="width: <?php echo $pos_percentage; ?>%" 
+                                                aria-valuenow="<?php echo $pos_percentage; ?>" aria-valuemin="0" aria-valuemax="100"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                                
                                 <div class="chart-container">
                                     <!-- Add chart error container -->
                                     <div id="chart-error"></div>
@@ -1118,7 +1302,8 @@ document.addEventListener('DOMContentLoaded', function() {
         
         // Safely parse chart data with fallbacks
         var chartLabels = <?php echo json_encode($chart_labels) ?: '[]'; ?>;
-        var revenueData = <?php echo json_encode($revenue_data) ?: '[]'; ?>;
+        var revenueDataSubscriptions = <?php echo json_encode($revenue_data_subscriptions) ?: '[]'; ?>;
+        var revenueDataPOS = <?php echo json_encode($revenue_data_pos) ?: '[]'; ?>;
         var transactionData = <?php echo json_encode($transaction_data) ?: '[]'; ?>;
         
         // Verify data integrity
@@ -1126,8 +1311,12 @@ document.addEventListener('DOMContentLoaded', function() {
             chartLabels = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
         }
         
-        if (!Array.isArray(revenueData) || !revenueData.length) {
-            revenueData = Array(chartLabels.length).fill(0);
+        if (!Array.isArray(revenueDataSubscriptions) || !revenueDataSubscriptions.length) {
+            revenueDataSubscriptions = Array(chartLabels.length).fill(0);
+        }
+        
+        if (!Array.isArray(revenueDataPOS) || !revenueDataPOS.length) {
+            revenueDataPOS = Array(chartLabels.length).fill(0);
         }
         
         if (!Array.isArray(transactionData) || !transactionData.length) {
@@ -1140,12 +1329,21 @@ document.addEventListener('DOMContentLoaded', function() {
                 labels: chartLabels,
                 datasets: [
                     {
-                        label: 'Revenue ($)',
-                        data: revenueData,
+                        label: 'Subscription Revenue ($)',
+                        data: revenueDataSubscriptions,
                         backgroundColor: 'rgba(85, 110, 230, 0.7)',
                         borderColor: 'rgb(85, 110, 230)',
                         borderWidth: 1,
                         order: 1
+                    },
+                    {
+                        label: 'POS Revenue ($)',
+                        data: revenueDataPOS,
+                        type: 'bar',
+                        backgroundColor: 'rgba(241, 180, 76, 0.7)',
+                        borderColor: 'rgb(241, 180, 76)',
+                        borderWidth: 1,
+                        order: 2
                     },
                     {
                         label: 'Transactions',
@@ -1304,8 +1502,9 @@ function updateChartRange(days) {
         if (window.revenueChart) {
             // Update chart data
             window.revenueChart.data.labels = data.labels || [];
-            window.revenueChart.data.datasets[0].data = data.revenue || [];
-            window.revenueChart.data.datasets[1].data = data.transactions || [];
+            window.revenueChart.data.datasets[0].data = data.revenueSubscriptions || [];
+            window.revenueChart.data.datasets[1].data = data.revenuePOS || [];
+            window.revenueChart.data.datasets[2].data = data.transactions || [];
             window.revenueChart.update();
         }
         document.getElementById('revenueChart').style.opacity = 1;

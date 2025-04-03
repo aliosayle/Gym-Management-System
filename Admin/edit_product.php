@@ -37,6 +37,8 @@ if (!isset($_GET['id'])) {
 }
 
 $product_id = $_GET['id'];
+$branch_id = isset($_GET['branch_id']) ? intval($_GET['branch_id']) : 
+            (isset($_SESSION['selected_branch_id']) ? intval($_SESSION['selected_branch_id']) : null);
 
 // Fetch product details
 $product_query = "SELECT * FROM products WHERE product_id = :product_id";
@@ -60,7 +62,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['form_submit'])) {
     } else {
         $_SESSION['delete_message'] = "Error updating product: " . implode(", ", $update_stmt->errorInfo());
     }
-    header("Location: products.php");
+    
+    // If branch_id is not set, get it from the product record
+    if ($branch_id === null) {
+        $branch_id = $product['branch_id'];
+    }
+    
+    header("Location: products.php?branch_id=" . $branch_id);
     exit();
 }
 ?>
@@ -89,7 +97,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['form_submit'])) {
                                 <h4 class="card-title">Edit Product</h4>
                             </div>
                             <div class="card-body">
-                                <form method="POST" action="edit_product.php?id=<?php echo htmlspecialchars($product_id); ?>">
+                                <form method="POST" action="edit_product.php?id=<?php echo htmlspecialchars($product_id); ?>&branch_id=<?php echo htmlspecialchars($branch_id ?: $product['branch_id']); ?>">
                                     <input type="hidden" name="form_submit" value="1">
                                     <div class="mb-3">
                                         <label for="product_name" class="form-label">Product Name</label>

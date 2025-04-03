@@ -45,12 +45,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['form_submitted'])) {
     $payment_id = uniqid();
     $client_branch_id = $_POST['branch_id'];
     $amount = null;
+    
+    // Get the custom subscription start date or use current date
+    $subscription_start_date = !empty($_POST['subscription_start_date']) ? 
+                               $_POST['subscription_start_date'] : 
+                               date('Y-m-d');
+    
+    // Validate the date format
+    $start_date = DateTime::createFromFormat('Y-m-d', $subscription_start_date);
+    if (!$start_date) {
+        die("Invalid date format. Please use YYYY-MM-DD format.");
+    }
 
-    // Fetch package price
-    $package_price_sql = "SELECT price FROM packages WHERE id = :package_id";
-    $stmt = $pdo->prepare($package_price_sql);
+    // Fetch package price and duration
+    $package_sql = "SELECT price, number_of_days FROM packages WHERE id = :package_id";
+    $stmt = $pdo->prepare($package_sql);
     $stmt->execute(['package_id' => $package_id]);
-    $amount = $stmt->fetchColumn();
+    $package = $stmt->fetch(PDO::FETCH_ASSOC);
+    
+    if (!$package) {
+        die("Selected package not found.");
+    }
+    
+    $amount = $package['price'];
+    $days = $package['number_of_days'];
+    
+    // Calculate subscription end date based on start date and package duration
+    $end_date = clone $start_date;
+    $end_date->add(new DateInterval("P{$days}D"));
+    $subscription_end_date = $end_date->format('Y-m-d');
 
     $payment_method = 'cash';
     $payment_status = 'Pending';
@@ -61,8 +84,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['form_submitted'])) {
 
         // Insert new client
         $client_id = bin2hex(random_bytes(16)); // Generate a 36-character UUID
-        $insert_client_sql = "INSERT INTO clients (client_id, name, phone_number, package_id, branch_id, subscription_status) 
-                             VALUES (:client_id, :name, :phone_number, :package_id, :branch_id, :subscription_status)";
+        $insert_client_sql = "INSERT INTO clients (
+                                client_id, name, phone_number, package_id, 
+                                branch_id, subscription_status, subscription_end_date
+                              ) VALUES (
+                                :client_id, :name, :phone_number, :package_id, 
+                                :branch_id, :subscription_status, :subscription_end_date
+                              )";
         $stmt = $pdo->prepare($insert_client_sql);
         $stmt->execute([
             'client_id' => $client_id,
@@ -70,11 +98,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['form_submitted'])) {
             'phone_number' => $phone_number,
             'package_id' => $package_id,
             'branch_id' => $client_branch_id,
-            'subscription_status' => $subscription_status
+            'subscription_status' => $subscription_status,
+            'subscription_end_date' => $subscription_end_date
         ]);
 
         // Insert new payment
-        $insert_payment_sql = "INSERT INTO payments (payment_id, client_id, amount, payment_method, package_id, payment_status) VALUES (:payment_id, :client_id, :amount, :payment_method, :package_id, :payment_status)";
+        $insert_payment_sql = "INSERT INTO payments (
+                                payment_id, client_id, amount, payment_method, 
+                                package_id, payment_status, payment_date, branch_id
+                              ) VALUES (
+                                :payment_id, :client_id, :amount, :payment_method, 
+                                :package_id, :payment_status, :payment_date, :branch_id
+                              )";
         $stmt = $pdo->prepare($insert_payment_sql);
         $stmt->execute([
             'payment_id' => $payment_id,
@@ -82,14 +117,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['form_submitted'])) {
             'amount' => $amount,
             'payment_method' => $payment_method,
             'package_id' => $package_id,
-            'payment_status' => $payment_status
+            'payment_status' => $payment_status,
+            'payment_date' => $subscription_start_date,
+            'branch_id' => $client_branch_id
         ]);
 
         // Commit transaction
         $pdo->commit();
+        
+        // Success message
+        $_SESSION['message'] = "Client added successfully with subscription starting on " . $subscription_start_date;
+        $_SESSION['alert_type'] = "success";
+        
     } catch (Exception $e) {
         // Rollback transaction if something goes wrong
         $pdo->rollBack();
+        
+        // Error message
+        $_SESSION['message'] = "Error: " . $e->getMessage();
+        $_SESSION['alert_type'] = "danger";
+        
         throw $e;
     }
 
@@ -173,6 +220,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['form_submitted'])) {
                                                     }
                                                     ?>
                                                 </select>
+                                            </div>
+                                            
+                                            <div class="mb-3">
+                                                <label for="subscription_start_date" class="form-label">Subscription Start Date</label>
+                                                <input class="form-control" type="date" name="subscription_start_date" id="subscription_start_date" value="<?php echo date('Y-m-d'); ?>">
+                                                <small class="text-muted">Leave as today's date or select a custom start date for the subscription.</small>
                                             </div>
 
                                         </div>
