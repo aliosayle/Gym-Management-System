@@ -855,9 +855,11 @@ if (!empty($_SESSION['cart'])) {
                 // Add cart items
                 cart.forEach(item => {
                     const itemTotal = item.price * item.quantity;
+                    // Use item.description if available, otherwise use item.name
+                    const itemDesc = item.description || item.name;
                     receiptHtml += `
                         <tr>
-                            <td style="text-align:left">${item.name}</td>
+                            <td style="text-align:left">${itemDesc}</td>
                             <td style="text-align:right">${item.quantity}</td>
                             <td style="text-align:right">$${item.price.toFixed(2)}</td>
                             <td style="text-align:right">$${itemTotal.toFixed(2)}</td>
@@ -894,32 +896,16 @@ if (!empty($_SESSION['cart'])) {
             
             // Function to print receipt
             function printReceipt() {
-                const receiptContent = document.getElementById('receipt-content').innerHTML;
-                const printWindow = window.open('', '', 'height=600,width=800');
+                // Get the sale ID from the receipt content
+                const saleId = $('#receipt-content').find('.receipt-header p:contains("Receipt #")').text().replace('Receipt #: ', '');
                 
-                printWindow.document.write('<html><head><title>Receipt</title>');
-                printWindow.document.write('<style>');
-                printWindow.document.write(`
-                    body { font-family: 'Courier New', monospace; line-height: 1.4; margin: 0; padding: 20px; }
-                    .receipt-header { text-align: center; margin-bottom: 15px; padding-bottom: 10px; border-bottom: 1px dashed #000; }
-                    .receipt-items { margin-bottom: 15px; }
-                    .receipt-total { border-top: 1px dashed #000; padding-top: 10px; font-weight: bold; }
-                    .receipt-footer { text-align: center; margin-top: 15px; border-top: 1px dashed #000; padding-top: 10px; font-size: 12px; }
-                    table { width: 100%; border-collapse: collapse; }
-                    th, td { padding: 5px; }
-                `);
-                printWindow.document.write('</style></head><body>');
-                printWindow.document.write(receiptContent);
-                printWindow.document.write('</body></html>');
-                
-                printWindow.document.close();
-                printWindow.focus();
-                
-                // Print after a short delay to ensure content is loaded
-                setTimeout(function() {
-                    printWindow.print();
-                    printWindow.close();
-                }, 500);
+                if (saleId) {
+                    // Open the dedicated print_receipt.php in a new window
+                    const branchId = <?php echo isset($_SESSION['selected_branch_id']) ? $_SESSION['selected_branch_id'] : 1; ?>;
+                    window.open('ajax/print_receipt.php?sale_id=' + saleId + '&branch_id=' + branchId, '_blank');
+                } else {
+                    showAlert('Error: Could not find sale ID for printing', 'danger');
+                }
             }
             
             // Function to filter products

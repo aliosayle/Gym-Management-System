@@ -592,6 +592,19 @@ $payment_methods = ['Cash', 'Credit Card', 'Debit Card', 'Bank Transfer', 'Mobil
                 var saleId = $(this).data('id');
                 window.open('ajax/print_receipt.php?sale_id=' + saleId + '&branch_id=<?php echo $selected_branch_id; ?>', '_blank');
             });
+            
+            // Handle modal print receipt button click
+            $('#print-receipt-btn').on('click', function() {
+                // Get the sale ID from the receipt content
+                var saleId = $('#receipt-content').find('.receipt-header p:contains("Receipt #")').text().replace('Receipt #: ', '');
+                
+                if (saleId) {
+                    // Open the dedicated print_receipt.php in a new window
+                    window.open('ajax/print_receipt.php?sale_id=' + saleId + '&branch_id=<?php echo $selected_branch_id; ?>', '_blank');
+                } else {
+                    alert('Error: Could not find sale ID for printing');
+                }
+            });
         });
     </script>
 </body>

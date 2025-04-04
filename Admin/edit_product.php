@@ -99,12 +99,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['form_submit'])) {
                                 <form method="POST" action="edit_product.php?id=<?php echo htmlspecialchars($product_id); ?>&branch_id=<?php echo htmlspecialchars($branch_id ?: $product['branch_id']); ?>">
                                     <input type="hidden" name="form_submit" value="1">
                                     <div class="mb-3">
-                                        <label for="product_name" class="form-label">Product Name</label>
+                                        <label for="product_name" class="form-label">Product SKU/Barcode</label>
                                         <input type="text" class="form-control" id="product_name" name="product_name" value="<?php echo htmlspecialchars($product['name']); ?>" required>
+                                        <small class="form-text text-muted">Enter barcode or SKU number. This is used for scanning/inventory purposes.</small>
                                     </div>
                                     <div class="mb-3">
-                                        <label for="description" class="form-label">Description</label>
+                                        <label for="description" class="form-label">Product Name/Description</label>
                                         <textarea class="form-control" id="description" name="description" rows="3" required><?php echo htmlspecialchars($product['description']); ?></textarea>
+                                        <small class="form-text text-muted">Enter the actual product name. This will appear on receipts and sales reports.</small>
                                     </div>
                                     <div class="mb-3">
                                         <label for="price" class="form-label">Price</label>

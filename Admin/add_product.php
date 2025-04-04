@@ -95,12 +95,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['form_submit']) && $ca
                                 <form method="POST" action="add_product.php?branch_id=<?php echo $branch_id; ?>">
                                     <input type="hidden" name="form_submit" value="1">
                                     <div class="mb-3">
-                                        <label for="product_name" class="form-label">Product Name</label>
+                                        <label for="product_name" class="form-label">Product SKU/Barcode</label>
                                         <input type="text" class="form-control" id="product_name" name="product_name" required>
+                                        <small class="form-text text-muted">Enter barcode or SKU number. This is used for scanning/inventory purposes.</small>
                                     </div>
                                     <div class="mb-3">
-                                        <label for="description" class="form-label">Description</label>
+                                        <label for="description" class="form-label">Product Name/Description</label>
                                         <textarea class="form-control" id="description" name="description" rows="3" required></textarea>
+                                        <small class="form-text text-muted">Enter the actual product name. This will appear on receipts and sales reports.</small>
                                     </div>
                                     <div class="mb-3">
                                         <label for="price" class="form-label">Price</label>

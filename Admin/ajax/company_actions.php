@@ -44,24 +44,29 @@ if ($action === 'add_company') {
     }
 
     try {
-        $query = "INSERT INTO companies (name, contact_person, address, phone, email) VALUES (:name, :contact_person, :address, :phone, :email)";
+        $query = "INSERT INTO companies (name, contact_person, address, phone, email, id_nat, vat_number, rccm, nif) 
+                  VALUES (:name, :contact_person, :address, :phone, :email, :id_nat, :vat_number, :rccm, :nif)";
         $stmt = $pdo->prepare($query);
         $result = $stmt->execute([
             'name' => $_POST['name'],
             'contact_person' => $_POST['contact_person'] ?? null,
             'address' => $_POST['address'] ?? null,
             'phone' => $_POST['phone'] ?? null,
-            'email' => $_POST['email'] ?? null
+            'email' => $_POST['email'] ?? null,
+            'id_nat' => $_POST['id_nat'] ?? null,
+            'vat_number' => $_POST['vat_number'] ?? null,
+            'rccm' => $_POST['rccm'] ?? null,
+            'nif' => $_POST['nif'] ?? null
         ]);
-
-        if ($result) {
-            echo json_encode(['status' => 'success', 'message' => 'Company added successfully']);
-        } else {
-            echo json_encode(['status' => 'error', 'message' => 'Failed to add company']);
+     
+     if ($result) {
+         echo json_encode(['status' => 'success', 'message' => 'Company added successfully']);
+     } else {
+         echo json_encode(['status' => 'error', 'message' => 'Failed to add company']);
         }
     } catch (PDOException $e) {
         echo json_encode(['status' => 'error', 'message' => 'Database error: ' . $e->getMessage()]);
-    }
+     }
 }
 
 // Update an existing company
@@ -73,7 +78,17 @@ else if ($action === 'update_company') {
     }
 
     try {
-        $query = "UPDATE companies SET name = :name, contact_person = :contact_person, address = :address, phone = :phone, email = :email WHERE id = :id";
+        $query = "UPDATE companies SET 
+                 name = :name, 
+                 contact_person = :contact_person, 
+                 address = :address, 
+                 phone = :phone, 
+                 email = :email,
+                 id_nat = :id_nat,
+                 vat_number = :vat_number,
+                 rccm = :rccm,
+                 nif = :nif
+                 WHERE id = :id";
         $stmt = $pdo->prepare($query);
         $result = $stmt->execute([
             'id' => $_POST['id'],
@@ -81,17 +96,21 @@ else if ($action === 'update_company') {
             'contact_person' => $_POST['contact_person'] ?? null,
             'address' => $_POST['address'] ?? null,
             'phone' => $_POST['phone'] ?? null,
-            'email' => $_POST['email'] ?? null
+            'email' => $_POST['email'] ?? null,
+            'id_nat' => $_POST['id_nat'] ?? null,
+            'vat_number' => $_POST['vat_number'] ?? null,
+            'rccm' => $_POST['rccm'] ?? null,
+            'nif' => $_POST['nif'] ?? null
         ]);
-
-        if ($result) {
-            echo json_encode(['status' => 'success', 'message' => 'Company updated successfully']);
-        } else {
-            echo json_encode(['status' => 'error', 'message' => 'Failed to update company']);
+     
+     if ($result) {
+         echo json_encode(['status' => 'success', 'message' => 'Company updated successfully']);
+     } else {
+         echo json_encode(['status' => 'error', 'message' => 'Failed to update company']);
         }
     } catch (PDOException $e) {
         echo json_encode(['status' => 'error', 'message' => 'Database error: ' . $e->getMessage()]);
-    }
+     }
 }
 
 // Delete a company

@@ -187,6 +187,10 @@ if (isset($_SESSION['error_message'])) {
                                                 <th>Contact Person</th>
                                                 <th>Phone</th>
                                                 <th>Email</th>
+                                                <th>ID NAT</th>
+                                                <th>VAT Number</th>
+                                                <th>RCCM</th>
+                                                <th>NIF</th>
                                                 <th>Actions</th>
                                             </tr>
                                         </thead>
@@ -198,6 +202,10 @@ if (isset($_SESSION['error_message'])) {
                                                     <td><?php echo htmlspecialchars($company['contact_person'] ?? ''); ?></td>
                                                     <td><?php echo htmlspecialchars($company['phone'] ?? ''); ?></td>
                                                     <td><?php echo htmlspecialchars($company['email'] ?? ''); ?></td>
+                                                    <td><?php echo htmlspecialchars($company['id_nat'] ?? ''); ?></td>
+                                                    <td><?php echo htmlspecialchars($company['vat_number'] ?? ''); ?></td>
+                                                    <td><?php echo htmlspecialchars($company['rccm'] ?? ''); ?></td>
+                                                    <td><?php echo htmlspecialchars($company['nif'] ?? ''); ?></td>
                                                     <td>
                                                         <div class="d-flex gap-2">
                                                             <button type="button" class="btn btn-info btn-sm view-branches" data-id="<?php echo $company['id']; ?>" data-name="<?php echo htmlspecialchars($company['name']); ?>">
@@ -260,6 +268,24 @@ if (isset($_SESSION['error_message'])) {
                             <label for="company_email" class="form-label">Email</label>
                             <input type="email" class="form-control" id="company_email" name="email">
                         </div>
+                        <hr>
+                        <h6>Legal Information</h6>
+                        <div class="mb-3">
+                            <label for="id_nat" class="form-label">ID NAT</label>
+                            <input type="text" class="form-control" id="id_nat" name="id_nat">
+                        </div>
+                        <div class="mb-3">
+                            <label for="vat_number" class="form-label">VAT Number</label>
+                            <input type="text" class="form-control" id="vat_number" name="vat_number">
+                        </div>
+                        <div class="mb-3">
+                            <label for="rccm" class="form-label">RCCM</label>
+                            <input type="text" class="form-control" id="rccm" name="rccm">
+                        </div>
+                        <div class="mb-3">
+                            <label for="nif" class="form-label">NIF</label>
+                            <input type="text" class="form-control" id="nif" name="nif">
+                        </div>
                     </div>
                     <div class="modal-footer">
                         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
@@ -300,6 +326,24 @@ if (isset($_SESSION['error_message'])) {
                         <div class="mb-3">
                             <label for="edit_company_email" class="form-label">Email</label>
                             <input type="email" class="form-control" id="edit_company_email" name="email">
+                        </div>
+                        <hr>
+                        <h6>Legal Information</h6>
+                        <div class="mb-3">
+                            <label for="edit_id_nat" class="form-label">ID NAT</label>
+                            <input type="text" class="form-control" id="edit_id_nat" name="id_nat">
+                        </div>
+                        <div class="mb-3">
+                            <label for="edit_vat_number" class="form-label">VAT Number</label>
+                            <input type="text" class="form-control" id="edit_vat_number" name="vat_number">
+                        </div>
+                        <div class="mb-3">
+                            <label for="edit_rccm" class="form-label">RCCM</label>
+                            <input type="text" class="form-control" id="edit_rccm" name="rccm">
+                        </div>
+                        <div class="mb-3">
+                            <label for="edit_nif" class="form-label">NIF</label>
+                            <input type="text" class="form-control" id="edit_nif" name="nif">
                         </div>
                     </div>
                     <div class="modal-footer">
@@ -503,7 +547,11 @@ if (isset($_SESSION['error_message'])) {
                     contact_person: $('#contact_person').val(),
                     address: $('#company_address').val(),
                     phone: $('#company_phone').val(),
-                    email: $('#company_email').val()
+                    email: $('#company_email').val(),
+                    id_nat: $('#id_nat').val(),
+                    vat_number: $('#vat_number').val(),
+                    rccm: $('#rccm').val(),
+                    nif: $('#nif').val()
                 };
                 
                 $.ajax({
@@ -586,6 +634,12 @@ if (isset($_SESSION['error_message'])) {
                                 $('#edit_company_phone').val(company.phone);
                                 $('#edit_company_email').val(company.email);
                                 
+                                // Set values for new fields
+                                $('#edit_id_nat').val(company.id_nat);
+                                $('#edit_vat_number').val(company.vat_number);
+                                $('#edit_rccm').val(company.rccm);
+                                $('#edit_nif').val(company.nif);
+                                
                                 $('#editCompanyModal').modal('show');
                             } else {
                                 Swal.fire({
@@ -615,7 +669,11 @@ if (isset($_SESSION['error_message'])) {
                     contact_person: $('#edit_contact_person').val(),
                     address: $('#edit_company_address').val(),
                     phone: $('#edit_company_phone').val(),
-                    email: $('#edit_company_email').val()
+                    email: $('#edit_company_email').val(),
+                    id_nat: $('#edit_id_nat').val(),
+                    vat_number: $('#edit_vat_number').val(),
+                    rccm: $('#edit_rccm').val(),
+                    nif: $('#edit_nif').val()
                 };
                 
                 $.ajax({

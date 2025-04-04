@@ -176,6 +176,7 @@ function addToCart() {
             $_SESSION['cart'][] = [
                 'product_id' => $product_id,
                 'name' => $product['name'],
+                'description' => $product['description'],
                 'price' => (float)$product['price'],
                 'quantity' => $quantity,
                 'max_quantity' => $product['quantity_in_stock'],
