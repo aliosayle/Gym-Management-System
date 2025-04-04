@@ -141,11 +141,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['client_name']) && $ca
     echo "<script>alert('You do not have permission to add clients.');</script>";
 }
 
-
-include 'layouts/api_keys.php';
+// Try to include the API keys file, with fallback if it doesn't exist
+if (file_exists('layouts/api_keys.php')) {
+    include 'layouts/api_keys.php';
+} else {
+    // Define fallback values for API keys
+    $apiUrl = 'http://www.00243.net:3001/api/v1/messages';
+    $authToken = 'u4xKAyGrv8LUaPzR.zSRIH21JkxCr0IZ4Pk1wPQbVDSqHRl03';
+}
 
 // Function to send WhatsApp message
 function sendWhatsAppMessage($phoneNumber, $messageBody) {
+    global $apiUrl, $authToken;
 
     $curl = curl_init();
 

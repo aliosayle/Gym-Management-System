@@ -21,9 +21,9 @@ if ($user_id === null) {
 
 // Check specific permissions for this page
 $can_manage_packages = has_permission('can_manage_packages', $pdo);
-$can_add_package = has_permission('can_add_package', $pdo) || has_permission('can_manage_packages', $pdo);
-$can_edit_package = has_permission('can_edit_package', $pdo) || has_permission('can_manage_packages', $pdo);
-$can_delete_package = has_permission('can_delete_package', $pdo) || has_permission('can_manage_packages', $pdo);
+$can_add_package = $can_manage_packages;
+$can_edit_package = $can_manage_packages;
+$can_delete_package = $can_manage_packages;
 
 // If user doesn't have permission to manage packages, redirect them
 if (!$can_manage_packages) {
