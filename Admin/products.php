@@ -11,6 +11,9 @@ if (!$pdo) {
     die("Connection not established: " . $pdo->errorInfo());
 }
 
+// Include permission checks
+include 'layouts/check_permission.php';
+
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
@@ -28,20 +31,13 @@ if ($user_id === null) {
     die("User ID is not set in the session.");
 }
 
-$permission_query = "SELECT canedit, candelete, canadd FROM users WHERE id = :id";
-$permission_stmt = $pdo->prepare($permission_query);
-$permission_stmt->execute(['id' => $user_id]);
-$permissions = $permission_stmt->fetch(PDO::FETCH_ASSOC);
+// Check specific permissions for this page
+$can_manage_inventory = has_permission('can_manage_inventory', $pdo);
 
-// Check if $permissions is false (no user found)
-if ($permissions === false) {
-    die("No permissions found for the given user.");
-}
-
-// Ensure permissions are set to 0 or 1 (as boolean values)
-$canedit = (int) $permissions['canedit']; // Cast to integer (either 0 or 1)
-$candelete = (int) $permissions['candelete']; // Cast to integer (either 0 or 1)
-$canadd = (int) $permissions['canadd']; // Cast to integer (either 0 or 1)
+// Set action permissions based on inventory management permission
+$canedit = $can_manage_inventory ? 1 : 0;
+$candelete = $can_manage_inventory ? 1 : 0;
+$canadd = $can_manage_inventory ? 1 : 0;
 
 // Get the user's assigned branches
 $branches_query = "SELECT b.* FROM branches b 

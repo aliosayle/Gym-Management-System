@@ -11,6 +11,9 @@ if (!$pdo) {
     die("Connection not established: " . $pdo->errorInfo());
 }
 
+// Include permission checks
+include 'layouts/check_permission.php';
+
 // Get branch ID from the request
 $branch_id = isset($_GET['branch_id']) ? intval($_GET['branch_id']) : 
             (isset($_SESSION['selected_branch_id']) ? intval($_SESSION['selected_branch_id']) : 1);
@@ -20,18 +23,10 @@ if (!isset($_SESSION['id'])) {
     die("User ID is not set in session.");
 }
 
-// Fetch user permissions
-$user_id = $_SESSION['id']; // Assuming user_id is stored in session
-$permission_query = "SELECT canadd FROM users WHERE id = :id";
-$permission_stmt = $pdo->prepare($permission_query);
-$permission_stmt->execute(['id' => $user_id]);
-$permissions = $permission_stmt->fetch(PDO::FETCH_ASSOC);
+// Check specific permissions for this page
+$can_manage_inventory = has_permission('can_manage_inventory', $pdo);
 
-if (!$permissions) {
-    die("User permissions not found.");
-}
-
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['form_submit']) && $permissions['canadd'] == 1) {
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['form_submit']) && $can_manage_inventory) {
     $product_name = $_POST['product_name'];
     $description = $_POST['description'];
     $price = $_POST['price'];

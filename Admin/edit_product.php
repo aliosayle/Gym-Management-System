@@ -11,6 +11,9 @@ if (!$pdo) {
     die("Connection not established: " . $pdo->errorInfo());
 }
 
+// Include permission checks
+include 'layouts/check_permission.php';
+
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
@@ -20,14 +23,10 @@ if (!isset($_SESSION['id'])) {
     die("User ID is not set in session.");
 }
 
-// Fetch user permissions
-$user_id = $_SESSION['id']; // Assuming user_id is stored in session
-$permission_query = "SELECT canedit FROM users WHERE id = :id";
-$permission_stmt = $pdo->prepare($permission_query);
-$permission_stmt->execute(['id' => $user_id]);
-$permissions = $permission_stmt->fetch(PDO::FETCH_ASSOC);
+// Check specific permissions for this page
+$can_manage_inventory = has_permission('can_manage_inventory', $pdo);
 
-if (!$permissions || $permissions['canedit'] != 1) {
+if (!$can_manage_inventory) {
     die("You do not have permission to edit products.");
 }
 
