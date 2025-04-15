@@ -275,7 +275,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['product_name']) && $c
                 <div class="row">
                     <!-- Total Products -->
                     <div class="col-md-3">
-                        <div class="card card-stats mb-4">
+                        <div class="card card-stats mb-4" id="card-total-products" style="cursor: pointer;">
                             <div class="card-body">
                                 <div class="row">
                                     <div class="col">
@@ -294,7 +294,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['product_name']) && $c
                     
                     <!-- Inventory Value -->
                     <div class="col-md-3">
-                        <div class="card card-stats mb-4">
+                        <div class="card card-stats mb-4" id="card-inventory-value" style="cursor: pointer;">
                             <div class="card-body">
                                 <div class="row">
                                     <div class="col">
@@ -313,7 +313,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['product_name']) && $c
                     
                     <!-- Low Stock -->
                     <div class="col-md-3">
-                        <div class="card card-stats mb-4">
+                        <div class="card card-stats mb-4" id="card-low-stock" style="cursor: pointer;">
                             <div class="card-body">
                                 <div class="row">
                                     <div class="col">
@@ -332,7 +332,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['product_name']) && $c
                     
                     <!-- Out of Stock -->
                     <div class="col-md-3">
-                        <div class="card card-stats mb-4">
+                        <div class="card card-stats mb-4" id="card-out-of-stock" style="cursor: pointer;">
                             <div class="card-body">
                                 <div class="row">
                                     <div class="col">
@@ -358,6 +358,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['product_name']) && $c
                                 <div class="d-flex justify-content-between align-items-center mb-3">
                                     <h4 class="card-title mb-0">Inventory Management</h4>
                                     <div>
+                                        <button type="button" class="btn btn-outline-secondary me-2" id="toggleView">
+                                            <i class="fas fa-th-list"></i> <span id="viewModeText">Switch to Table View</span>
+                                        </button>
                                         <a href="add_product.php?branch_id=<?php echo $selected_branch_id; ?>" class="btn btn-primary" <?php if ($canadd == 0) echo 'disabled'; ?>>
                                     <i class="fas fa-plus me-2"></i> Add New Product
                                 </a>
@@ -568,6 +571,199 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['product_name']) && $c
             } else {
                 $(".product-item").hide();
                 $(".product-item[data-stock='" + value + "']").show();
+            }
+        });
+        
+        // Make statistic cards clickable to set filters
+        $("#card-total-products").on("click", function() {
+            $("#filterStock").val("").trigger("change");
+        });
+
+        $("#card-low-stock").on("click", function() {
+            $("#filterStock").val("low").trigger("change");
+        });
+
+        $("#card-out-of-stock").on("click", function() {
+            $("#filterStock").val("out").trigger("change");
+        });
+
+        // Card/Table view toggle
+        let viewMode = 'card'; // Default view is card
+        const $productsGrid = $("#productsGrid");
+        const $productsTable = $('<div id="productsTable" class="table-responsive" style="display:none;"></div>');
+        
+        // Create products table
+        function createProductsTable() {
+            let tableHtml = `
+                <table class="table table-striped table-bordered">
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>Description</th>
+                            <th>Price</th>
+                            <th>Quantity</th>
+                            <th>Status</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+            
+            $(".product-item").each(function() {
+                const $card = $(this).find(".product-card");
+                const name = $card.find(".card-title").text();
+                const description = $card.find(".card-text").text();
+                const price = $card.find(".text-primary").text();
+                const quantity = $card.find(".badge").text().replace("Stock: ", "");
+                const stockClass = $(this).data("stock");
+                
+                let statusBadge = '';
+                if (stockClass === 'out') {
+                    statusBadge = '<span class="badge bg-danger">Out of Stock</span>';
+                } else if (stockClass === 'low') {
+                    statusBadge = '<span class="badge bg-warning">Low Stock</span>';
+                } else {
+                    statusBadge = '<span class="badge bg-success">In Stock</span>';
+                }
+                
+                // Copy the action buttons
+                const actions = $card.find(".action-buttons").html();
+                
+                tableHtml += `
+                    <tr data-stock="${stockClass}">
+                        <td>${name}</td>
+                        <td>${description}</td>
+                        <td>${price}</td>
+                        <td>${quantity}</td>
+                        <td>${statusBadge}</td>
+                        <td>${actions}</td>
+                    </tr>
+                `;
+            });
+            
+            tableHtml += `
+                    </tbody>
+                </table>
+            `;
+            
+            $productsTable.html(tableHtml);
+            $productsGrid.after($productsTable);
+            
+            // Reattach event handlers
+            $productsTable.find(".stock-action").on("click", function() {
+                var action = $(this).data("action");
+                var productId = $(this).data("id");
+                var productName = $(this).data("name");
+                
+                $("#productName").text(productName);
+                $("#stockActionModal").data("product-id", productId);
+                
+                // Rest of your existing stock action handler...
+                if (action === "add") {
+                    $("#stockActionModalLabel").text("Add Stock");
+                    $("#stockActionText").text("Add stock for " + productName);
+                    $("#confirmStockAction").removeClass("btn-danger btn-warning").addClass("btn-success");
+                    $("#stockActionModal").data("action", "add");
+                } else if (action === "remove") {
+                    $("#stockActionModalLabel").text("Remove Stock");
+                    $("#stockActionText").text("Remove stock for " + productName);
+                    $("#confirmStockAction").removeClass("btn-success btn-warning").addClass("btn-danger");
+                    $("#stockActionModal").data("action", "remove");
+                } else if (action === "adjust") {
+                    $("#stockActionModalLabel").text("Adjust Stock");
+                    $("#stockActionText").text("Set exact stock level for " + productName);
+                    $("#confirmStockAction").removeClass("btn-success btn-danger").addClass("btn-warning");
+                    $("#stockActionModal").data("action", "adjust");
+                }
+                
+                // Reset form
+                $("#quantityInput").val(1);
+                $("#notesInput").val("");
+                
+                // Show modal
+                $("#stockActionModal").modal("show");
+            });
+            
+            // Reattach other event handlers as needed
+            $productsTable.find(".view-history").on("click", function() {
+                var productId = $(this).data("id");
+                var productName = $(this).data("name");
+                
+                // Your existing view history handler...
+                $("#transactionHistoryModalLabel").text("Transaction History: " + productName);
+                $("#transactionHistoryModal").modal("show");
+                
+                // Load transaction history
+                $.ajax({
+                    url: "ajax/get_product_transactions.php",
+                    type: "GET",
+                    data: {
+                        product_id: productId
+                    },
+                    dataType: "json",
+                    success: function(response) {
+                        // Your existing success handler...
+                    },
+                    error: function(xhr, status, error) {
+                        // Your existing error handler...
+                    }
+                });
+            });
+            
+            $productsTable.find(".delete-product").on("click", function() {
+                var productId = $(this).data("id");
+                var productName = $(this).data("name");
+                var branchId = <?php echo $selected_branch_id; ?>;
+                
+                // Your existing delete handler...
+                Swal.fire({
+                    title: 'Are you sure?',
+                    text: "You are about to delete " + productName + ". This action cannot be undone!",
+                    icon: 'warning',
+                    showCancelButton: true,
+                    confirmButtonColor: '#d33',
+                    cancelButtonColor: '#3085d6',
+                    confirmButtonText: 'Yes, delete it!'
+                }).then((result) => {
+                    if (result.isConfirmed) {
+                        window.location.href = 'delete_product.php?id=' + productId + '&branch_id=' + branchId;
+                    }
+                });
+            });
+        }
+        
+        // Toggle view
+        $("#toggleView").on("click", function() {
+            if (viewMode === 'card') {
+                // Switch to table view
+                if ($productsTable.children().length === 0) {
+                    createProductsTable(); // Create table if it doesn't exist
+                }
+                $productsGrid.hide();
+                $productsTable.show();
+                $("#viewModeText").text("Switch to Card View");
+                $(this).find("i").removeClass("fa-th-list").addClass("fa-th");
+                viewMode = 'table';
+            } else {
+                // Switch to card view
+                $productsTable.hide();
+                $productsGrid.show();
+                $("#viewModeText").text("Switch to Table View");
+                $(this).find("i").removeClass("fa-th").addClass("fa-th-list");
+                viewMode = 'card';
+            }
+            
+            // Apply current filters
+            const currentStockFilter = $("#filterStock").val();
+            if (currentStockFilter) {
+                if (viewMode === 'card') {
+                    $(".product-item").hide();
+                    $(".product-item[data-stock='" + currentStockFilter + "']").show();
+                } else {
+                    $productsTable.find("tr").show();
+                    $productsTable.find("tr:not([data-stock='" + currentStockFilter + "'])").hide();
+                    $productsTable.find("tr:first-child").show(); // Keep header visible
+                }
             }
         });
         
