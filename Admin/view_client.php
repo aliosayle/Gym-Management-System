@@ -54,6 +54,9 @@ $payment_stmt = $pdo->prepare($payment_query);
 $payment_stmt->execute(['client_id' => $client_id]);
 $payments = $payment_stmt->fetchAll(PDO::FETCH_ASSOC);
 
+// Set default currency - we're not fetching from DB as it's not available
+$currency_symbol = '$';
+
 // Calculate subscription statistics
 $total_spent = 0;
 $membership_days = 0;
@@ -378,7 +381,7 @@ $pending_payment = $pending_payment_stmt->fetch(PDO::FETCH_ASSOC);
                                                     </h5>
                                                     <p class="text-muted"><?php echo date('F j, Y', strtotime($payment['payment_date'])); ?></p>
                                                     <p>Package: <span class="font-weight-bold"><?php echo $payment['package_name']; ?></span></p>
-                                                    <p>Amount: <span class="font-weight-bold"><?php echo $payment['amount']; ?> <?php echo $company_info['currency']; ?></span></p>
+                                                    <p>Amount: <span class="font-weight-bold"><?php echo $payment['amount']; ?> <?php echo $currency_symbol; ?></span></p>
                                                     
                                                     <?php if ($payment['payment_status'] === 'Pending'): ?>
                                                     <div class="d-flex align-items-center">
