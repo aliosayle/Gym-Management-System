@@ -17,6 +17,13 @@ if (session_status() === PHP_SESSION_NONE) {
 // Include permission checks
 include 'layouts/check_permission.php';
 
+// Check if user is admin, if not redirect to clients page
+if (!$is_admin) {
+    $_SESSION['message'] = 'You do not have permission to view client details.';
+    header('Location: clients.php');
+    exit;
+}
+
 // Get client ID from GET parameter
 $client_id = isset($_GET['id']) ? $_GET['id'] : null;
 $branch_id = isset($_GET['branch_id']) ? $_GET['branch_id'] : (isset($_SESSION['selected_branch_id']) ? $_SESSION['selected_branch_id'] : 1);

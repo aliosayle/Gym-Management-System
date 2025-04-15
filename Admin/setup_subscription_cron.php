@@ -5,12 +5,19 @@
  * and also allows running the subscription update process manually
  */
 
+// Enable error reporting
 error_reporting(E_ALL);
 ini_set('display_errors', 1);
 
+// Include session and configuration files
 include 'layouts/session.php';
 include 'layouts/head-main.php';
 include 'layouts/config.php';
+
+// This feature has been disabled
+$_SESSION['message'] = 'The subscription automation feature has been disabled.';
+header('Location: index.php');
+exit;
 
 if (!$pdo) {
     die("Database connection error");

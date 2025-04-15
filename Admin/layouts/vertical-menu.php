@@ -289,6 +289,7 @@ $can_view_reports = has_permission('can_view_reports', $pdo);
 
                 <!-- Admin-only menus -->
                 <?php if ($is_admin): ?>
+                <!-- Subscription automation and permissions setup menu items have been disabled
                 <li>
                     <a href="setup_subscription_cron.php">
                         <i data-feather="clock"></i>
@@ -301,6 +302,7 @@ $can_view_reports = has_permission('can_view_reports', $pdo);
                         <span data-key="t-components">Setup Permissions</span>
                     </a>
                 </li>
+                -->
                 <?php endif; ?>
             </ul>
         </div>

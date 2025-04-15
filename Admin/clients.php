@@ -512,14 +512,16 @@ if ($alert_check_stmt->rowCount() == 0) {
                                                   </button>";
                                             echo "</form>";
                                             
-                                            // View Button
-                                            echo "<form action='view_client.php' method='get' style='margin:0 2px;'>";
-                                            echo "<input type='hidden' name='id' value='" . $client_id . "'>";
-                                            echo "<input type='hidden' name='branch_id' value='" . $selected_branch_id . "'>";
-                                            echo "<button type='submit' class='btn btn-info btn-sm action-button mx-1'>
-                                                    <i class='mdi mdi-eye d-block font-size-16'></i>
-                                                  </button>";
-                                            echo "</form>";
+                                            // View Button - Only for admins
+                                            if ($is_admin) {
+                                                echo "<form action='view_client.php' method='get' style='margin:0 2px;'>";
+                                                echo "<input type='hidden' name='id' value='" . $client_id . "'>";
+                                                echo "<input type='hidden' name='branch_id' value='" . $selected_branch_id . "'>";
+                                                echo "<button type='submit' class='btn btn-info btn-sm action-button mx-1'>
+                                                        <i class='mdi mdi-eye d-block font-size-16'></i>
+                                                      </button>";
+                                                echo "</form>";
+                                            }
                                             
                                             // Delete Button with SweetAlert
                                             echo "<button type='button' class='btn btn-danger btn-sm action-button mx-1' data-id='" . $client_id . "' " . 

@@ -3,9 +3,15 @@
 error_reporting(E_ALL);
 ini_set('display_errors', 1);
 
+// Include session and configuration files
 include 'layouts/session.php';
 include 'layouts/head-main.php';
 include 'layouts/config.php';
+
+// This feature has been disabled
+$_SESSION['message'] = 'The permissions setup feature has been disabled.';
+header('Location: index.php');
+exit;
 
 // Ensure only admin can access this page
 if (!isset($_SESSION['id'])) {
