@@ -223,9 +223,10 @@ $pending_payment = $pending_payment_stmt->fetch(PDO::FETCH_ASSOC);
                                     <div class="alert alert-warning" role="alert">
                                         <i class="mdi mdi-alert-circle me-2"></i>
                                         Pending Payment: $<?php echo htmlspecialchars($pending_payment['amount']); ?>
-                                        <button type="button" class="btn btn-sm btn-warning confirm-payment float-end" 
-                                                data-id="<?php echo htmlspecialchars($pending_payment['payment_id']); ?>">
-                                            <i class="mdi mdi-cash"></i> Confirm
+                                        <button type="button" class="btn btn-sm btn-warning confirm-payment" 
+                                                data-id="<?php echo htmlspecialchars($pending_payment['payment_id']); ?>"
+                                                style="z-index: 99; position: relative; touch-action: manipulation;">
+                                            <i class="mdi mdi-cash-check"></i> Confirm
                                         </button>
                                     </div>
                                     <?php endif; ?>
@@ -381,7 +382,9 @@ $pending_payment = $pending_payment_stmt->fetch(PDO::FETCH_ASSOC);
                                                     
                                                     <?php if ($payment['payment_status'] === 'Pending'): ?>
                                                     <div class="d-flex align-items-center">
-                                                        <button type="button" class="btn btn-sm btn-success confirm-payment" data-id="<?php echo $payment['payment_id']; ?>">
+                                                        <button type="button" class="btn btn-sm btn-success confirm-payment" 
+                                                                data-id="<?php echo $payment['payment_id']; ?>"
+                                                                style="z-index: 99; position: relative; touch-action: manipulation;">
                                                             <i class="mdi mdi-check me-1"></i>Confirm Payment
                                                         </button>
                                                     </div>
@@ -434,11 +437,16 @@ function initializeWhenJQueryIsReady() {
     
     jQuery(document).ready(function($) {
         // Confirm payment functionality
-        $('.confirm-payment').on('click', function () {
+        $(document).on('click touchstart', '.confirm-payment', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            
             var paymentId = $(this).data('id');
+            console.log('Confirm payment clicked for ID:', paymentId);
             
             // Simple confirmation dialog that works in all browsers
             if (confirm('Are you sure you want to confirm this payment?')) {
+                console.log('Confirmation accepted, redirecting...');
                 window.location.href = 'confirm_payment.php?id=' + paymentId + '&redirect=view_client.php%3Fid%3D<?php echo urlencode($client_id); ?>%26branch_id%3D<?php echo urlencode($branch_id); ?>';
             }
         });

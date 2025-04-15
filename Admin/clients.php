@@ -529,8 +529,9 @@ if ($alert_check_stmt->rowCount() == 0) {
                                             
                                             // Conditionally display either the Renew Subscription Button or Confirm Payment Button
                                             if ($has_pending_payment) {
-                                                echo "<button type='button' class='btn btn-warning btn-sm action-button mx-1 confirm-payment' data-id='" . htmlspecialchars($pending_payment['payment_id']) . "'>
-                                                        <i class='mdi mdi-cash d-block font-size-16'></i>
+                                                echo "<button type='button' class='btn btn-warning btn-sm action-button mx-1 confirm-payment' data-id='" . htmlspecialchars($pending_payment['payment_id']) . "' 
+                                                       style='z-index: 99; position: relative; touch-action: manipulation;'>
+                                                        <i class='mdi mdi-cash-check d-block font-size-16'></i>
                                                       </button>";
                                             } else {
                                                 echo "<button type='button' class='btn btn-primary btn-sm action-button mx-1 renew-subscription' data-id='" . $client_id . "'>
@@ -817,11 +818,16 @@ function initializeWhenJQueryIsReady() {
         });
         
         // Confirm payment functionality
-        $('.confirm-payment').on('click', function () {
+        $(document).on('click touchstart', '.confirm-payment', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            
             var paymentId = $(this).data('id');
+            console.log('Confirm payment clicked for ID:', paymentId);
             
             // Simple confirmation dialog that works in all browsers
             if (confirm('Are you sure you want to confirm this payment?')) {
+                console.log('Confirmation accepted, redirecting...');
                 window.location.href = 'confirm_payment.php?id=' + paymentId;
             }
         });
