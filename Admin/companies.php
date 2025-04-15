@@ -34,6 +34,10 @@ $create_companies_table = "CREATE TABLE IF NOT EXISTS companies (
     phone VARCHAR(20),
     email VARCHAR(100),
     contact_person VARCHAR(100),
+    id_nat VARCHAR(100),
+    vat_number VARCHAR(100),
+    rccm VARCHAR(100),
+    nif VARCHAR(100),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 )";
