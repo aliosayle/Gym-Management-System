@@ -247,6 +247,26 @@ if ($alert_check_stmt->rowCount() == 0) {
         }
         .action-button {
             margin: 0 3px;
+            position: relative; /* Ensure z-index works */
+            z-index: 5; /* Higher than surrounding elements */
+            touch-action: manipulation; /* Optimize for touch */
+        }
+        /* Ensure buttons have a larger touch target area on mobile */
+        @media (max-width: 768px) {
+            .action-button {
+                min-width: 38px;
+                min-height: 38px;
+                margin: 4px;
+                padding: 8px 12px;
+            }
+            /* Make table responsive */
+            table.dataTable.dtr-inline.collapsed>tbody>tr>td {
+                position: relative;
+            }
+            /* Improve action buttons container */
+            .table .d-flex {
+                gap: 6px !important;
+            }
         }
         .client-card {
             border-radius: 10px;
@@ -476,6 +496,9 @@ if ($alert_check_stmt->rowCount() == 0) {
                                             echo "<td>" . htmlspecialchars($row['created_at']) . "</td>";
                                             echo "<td class='text-center'>";
                                             
+                                            // Button container with better mobile response
+                                            echo "<div class='d-flex flex-wrap justify-content-center gap-1'>";
+                                            
                                             // Edit Button
                                             echo "<form method='POST' action='edit_client.php' style='display:inline-block;' onsubmit='return submitForm(this);'>";
                                             echo "<input type='hidden' name='client_id' value='" . $client_id . "'>";
@@ -499,15 +522,16 @@ if ($alert_check_stmt->rowCount() == 0) {
                                             
                                             // Conditionally display either the Renew Subscription Button or Confirm Payment Button
                                             if ($has_pending_payment) {
-                                                echo "<button type='button' class='btn btn-warning btn-sm action-button confirm-payment' data-id='" . htmlspecialchars($pending_payment['payment_id']) . "'>
+                                                echo "<button type='button' class='btn btn-warning btn-sm action-button confirm-payment' data-id='" . htmlspecialchars($pending_payment['payment_id']) . "' style='min-width: 38px; min-height: 38px;'>
                                                         <i class='mdi mdi-cash d-block font-size-16'></i>
                                                       </button>";
                                             } else {
-                                                echo "<button type='button' class='btn btn-primary btn-sm action-button renew-subscription' data-id='" . $client_id . "'>
+                                                echo "<button type='button' class='btn btn-primary btn-sm action-button renew-subscription' data-id='" . $client_id . "' style='min-width: 38px; min-height: 38px;'>
                                                         <i class='mdi mdi-refresh d-block font-size-16'></i>
                                                       </button>";
                                             }
                                             
+                                            echo "</div>"; // End of button container
                                             echo "</td>";
                                             echo "</tr>";
                                         }
