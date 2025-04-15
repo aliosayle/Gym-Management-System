@@ -548,20 +548,39 @@ if ($alert_check_stmt->rowCount() == 0) {
 <script src="assets/js/app.js"></script>
 
 <script>
-    function submitForm(form) {
-        var clientId = form.querySelector('input[name="client_id"]').value;
-        if (!clientId) {
+/* Fallback for jQuery if it didn't load properly */
+if (typeof jQuery === 'undefined') {
+    // Load jQuery directly if it's not already available
+    document.write('<script src="https://code.jquery.com/jquery-3.6.0.min.js"><\/script>');
+}
+
+function submitForm(form) {
+    var clientId = form.querySelector('input[name="client_id"]').value;
+    if (!clientId) {
+        if (typeof Swal !== 'undefined') {
             Swal.fire({
                 title: 'Error',
                 text: 'Client ID is missing',
                 icon: 'error'
             });
-            return false;
+        } else {
+            alert('Client ID is missing');
         }
-        return true;
+        return false;
+    }
+    return true;
+}
+
+/* Wait for jQuery to be available before using it */
+function initializeWhenJQueryIsReady() {
+    if (typeof jQuery === 'undefined') {
+        // If jQuery is still not available, try again in 100ms
+        setTimeout(initializeWhenJQueryIsReady, 100);
+        return;
     }
     
-    $(document).ready(function() {
+    // Use jQuery with noConflict to avoid problems
+    jQuery(document).ready(function($) {
         // Initialize DataTable
         var clientsTable = $('#datatable').DataTable({
             responsive: true,
@@ -580,49 +599,25 @@ if ($alert_check_stmt->rowCount() == 0) {
             "order": [[0, "asc"]]
         });
         
+        // Rest of your jQuery code...
+        
         // Enable tooltips
         var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'))
         var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
             return new bootstrap.Tooltip(tooltipTriggerEl)
         });
         
-        // Search functionality across both views
-        $('#searchInput').on('keyup', function() {
-            var value = $(this).val().toLowerCase();
-            
-            // List view search (DataTable)
-            clientsTable.search(value).draw();
-            
-            // Card view search
-            $('.client-item').filter(function() {
-                var shouldShow = $(this).text().toLowerCase().indexOf(value) > -1;
-                $(this).closest('.col-xl-3').toggle(shouldShow);
-                return shouldShow;
-            });
-        });
-        
-        // View toggling
-        $('#cardViewBtn').on('click', function() {
-            $(this).addClass('active');
-            $('#listViewBtn').removeClass('active');
-            $('#cardView').show();
-            $('#listView').hide();
-        });
-        
-        $('#listViewBtn').on('click', function() {
-            $(this).addClass('active');
-            $('#cardViewBtn').removeClass('active');
-            $('#listView').show();
-            $('#cardView').hide();
-            
-            // Adjust columns when showing DataTable
-            clientsTable.columns.adjust().responsive.recalc();
-        });
-        
         // SweetAlert for delete button
-        $(document).on('click', '.delete-client-btn', function () {
+        $('.delete-client-btn').on('click', function () {
             var clientId = $(this).data('id');
             var branchId = <?php echo $selected_branch_id; ?>;
+            
+            if (typeof Swal === 'undefined') {
+                if (confirm('Are you sure you want to delete this client?')) {
+                    window.location.href = 'delete_client.php?id=' + clientId + '&branch_id=' + branchId;
+                }
+                return;
+            }
             
             Swal.fire({
                 title: 'Are you sure?',
@@ -656,6 +651,7 @@ if ($alert_check_stmt->rowCount() == 0) {
                 return;
             }
             
+            // More jQuery code...
             Swal.fire({
                 title: 'Renew Subscription',
                 html: `
@@ -792,6 +788,14 @@ if ($alert_check_stmt->rowCount() == 0) {
         // Confirm payment functionality
         $('.confirm-payment').on('click', function () {
             var paymentId = $(this).data('id');
+            
+            if (typeof Swal === 'undefined') {
+                if (confirm('Are you sure you want to confirm this payment?')) {
+                    window.location.href = 'confirm_payment.php?id=' + paymentId;
+                }
+                return;
+            }
+            
             Swal.fire({
                 title: 'Confirm Payment',
                 text: "Are you sure you want to confirm this payment?",
@@ -807,6 +811,10 @@ if ($alert_check_stmt->rowCount() == 0) {
             });
         });
     });
+}
+
+// Start initialization
+initializeWhenJQueryIsReady();
 </script>
 
 </body>
