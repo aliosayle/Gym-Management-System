@@ -20,6 +20,9 @@ if (!isset($_GET['id'])) {
 
 $payment_id = $_GET['id'];
 
+// Determine where to redirect after processing
+$redirect = isset($_GET['redirect']) ? $_GET['redirect'] : 'clients.php';
+
 try {
     // Begin transaction
     $pdo->beginTransaction();
@@ -73,7 +76,7 @@ try {
     $_SESSION['message'] = 'Error: ' . $e->getMessage();
 }
 
-// Redirect back to clients page
-header('Location: clients.php');
+// Redirect to the appropriate page
+header('Location: ' . $redirect);
 exit;
 ?>

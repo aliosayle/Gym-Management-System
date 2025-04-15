@@ -820,26 +820,10 @@ function initializeWhenJQueryIsReady() {
         $('.confirm-payment').on('click', function () {
             var paymentId = $(this).data('id');
             
-            if (typeof Swal === 'undefined') {
-                if (confirm('Are you sure you want to confirm this payment?')) {
-                    window.location.href = 'confirm_payment.php?id=' + paymentId;
-                }
-                return;
+            // Simple confirmation dialog that works in all browsers
+            if (confirm('Are you sure you want to confirm this payment?')) {
+                window.location.href = 'confirm_payment.php?id=' + paymentId;
             }
-            
-            Swal.fire({
-                title: 'Confirm Payment',
-                text: "Are you sure you want to confirm this payment?",
-                icon: 'question',
-                showCancelButton: true,
-                confirmButtonColor: '#3085d6',
-                cancelButtonColor: '#d33',
-                confirmButtonText: 'Yes, confirm it!'
-            }).then((result) => {
-                if (result.isConfirmed) {
-                    window.location.href = 'confirm_payment.php?id=' + paymentId;
-                }
-            });
         });
     });
 }

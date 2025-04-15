@@ -381,13 +381,9 @@ $pending_payment = $pending_payment_stmt->fetch(PDO::FETCH_ASSOC);
                                                     
                                                     <?php if ($payment['payment_status'] === 'Pending'): ?>
                                                     <div class="d-flex align-items-center">
-                                                        <form action="confirm_payment.php" method="get" class="me-2">
-                                                            <input type="hidden" name="id" value="<?php echo $payment['payment_id']; ?>">
-                                                            <input type="hidden" name="redirect" value="view_client.php?id=<?php echo $client_id; ?>&branch_id=<?php echo $branch_id; ?>">
-                                                            <button type="submit" class="btn btn-sm btn-success">
-                                                                <i class="mdi mdi-check me-1"></i>Confirm Payment
-                                                            </button>
-                                                        </form>
+                                                        <button type="button" class="btn btn-sm btn-success confirm-payment" data-id="<?php echo $payment['payment_id']; ?>">
+                                                            <i class="mdi mdi-check me-1"></i>Confirm Payment
+                                                        </button>
                                                     </div>
                                                     <?php endif; ?>
                                                 </div>
@@ -441,26 +437,10 @@ function initializeWhenJQueryIsReady() {
         $('.confirm-payment').on('click', function () {
             var paymentId = $(this).data('id');
             
-            if (typeof Swal === 'undefined') {
-                if (confirm('Are you sure you want to confirm this payment?')) {
-                    window.location.href = 'confirm_payment.php?id=' + paymentId + '&redirect=view_client.php%3Fid%3D<?php echo urlencode($client_id); ?>%26branch_id%3D<?php echo urlencode($branch_id); ?>';
-                }
-                return;
+            // Simple confirmation dialog that works in all browsers
+            if (confirm('Are you sure you want to confirm this payment?')) {
+                window.location.href = 'confirm_payment.php?id=' + paymentId + '&redirect=view_client.php%3Fid%3D<?php echo urlencode($client_id); ?>%26branch_id%3D<?php echo urlencode($branch_id); ?>';
             }
-            
-            Swal.fire({
-                title: 'Confirm Payment',
-                text: "Are you sure you want to confirm this payment?",
-                icon: 'question',
-                showCancelButton: true,
-                confirmButtonColor: '#3085d6',
-                cancelButtonColor: '#d33',
-                confirmButtonText: 'Yes, confirm it!'
-            }).then((result) => {
-                if (result.isConfirmed) {
-                    window.location.href = 'confirm_payment.php?id=' + paymentId + '&redirect=view_client.php%3Fid%3D<?php echo urlencode($client_id); ?>%26branch_id%3D<?php echo urlencode($branch_id); ?>';
-                }
-            });
         });
         
         // Renew subscription functionality
