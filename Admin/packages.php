@@ -10,20 +10,23 @@ if (!$pdo) {
     die("Connection not established: " . $pdo->errorInfo());
 }
 
-// Include permission checks
-include 'layouts/check_permission.php';
-
 // Get user's assigned branches
 $user_id = isset($_SESSION['id']) ? $_SESSION['id'] : null;
 if ($user_id === null) {
     die("User ID is not set in the session.");
 }
 
-// Check specific permissions for this page
-$can_manage_packages = has_permission('can_manage_packages', $pdo);
-$can_add_package = $can_manage_packages;
-$can_edit_package = $can_manage_packages;
-$can_delete_package = $can_manage_packages;
+// Check if user is admin
+$admin_query = "SELECT isadmin FROM users WHERE id = :id";
+$admin_stmt = $pdo->prepare($admin_query);
+$admin_stmt->execute(['id' => $user_id]);
+$is_admin = $admin_stmt->fetchColumn();
+
+// Set permissions based on admin status
+$can_manage_packages = $is_admin == 1;
+$can_add_package = $is_admin == 1;
+$can_edit_package = $is_admin == 1;
+$can_delete_package = $is_admin == 1;
 
 // If user doesn't have permission to manage packages, redirect them
 if (!$can_manage_packages) {
@@ -31,12 +34,6 @@ if (!$can_manage_packages) {
     header("Location: index.php");
     exit;
 }
-
-// Get isadmin status for branch handling
-$admin_query = "SELECT isadmin FROM users WHERE id = :id";
-$admin_stmt = $pdo->prepare($admin_query);
-$admin_stmt->execute(['id' => $user_id]);
-$is_admin = $admin_stmt->fetchColumn();
 
 // Get user's assigned branches
 $branches_query = "SELECT b.* FROM branches b 

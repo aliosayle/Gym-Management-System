@@ -1,7 +1,6 @@
 <?php include 'layouts/session.php'; ?>
 <?php include 'layouts/head-main.php'; ?>
 <?php include('layouts/config.php'); ?>
-<?php include('layouts/check_permission.php'); ?>
 
 <?php
 // Configuration and session handling
@@ -11,12 +10,15 @@ if (session_status() === PHP_SESSION_NONE) {
 error_reporting(E_ALL);
 ini_set('display_errors', 1);
 
-// Check specific permissions for this page
-$can_manage_packages = has_permission('can_manage_packages', $pdo);
-$can_edit_package = has_permission('can_edit_package', $pdo) || has_permission('can_manage_packages', $pdo);
+// Check if user is admin
+$user_id = $_SESSION['id'];
+$admin_query = "SELECT isadmin FROM users WHERE id = :id";
+$admin_stmt = $pdo->prepare($admin_query);
+$admin_stmt->execute(['id' => $user_id]);
+$is_admin = $admin_stmt->fetchColumn();
 
-// If user doesn't have permission to edit packages, redirect them
-if (!$can_edit_package) {
+// Only admins can edit packages
+if ($is_admin != 1) {
     $_SESSION['error_message'] = "You don't have permission to edit packages.";
     header("Location: packages.php");
     exit;

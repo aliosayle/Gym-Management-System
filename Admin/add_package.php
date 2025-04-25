@@ -1,7 +1,6 @@
 <?php include 'layouts/session.php'; ?>
 <?php include 'layouts/head-main.php'; ?>
 <?php include('layouts/config.php'); ?>
-<?php include('layouts/check_permission.php'); ?>
 
 <?php
 // Configuration and session handling
@@ -11,12 +10,15 @@ if (session_status() === PHP_SESSION_NONE) {
 error_reporting(E_ALL);
 ini_set('display_errors', 1);
 
-// Check specific permissions for this page
-$can_manage_packages = has_permission('can_manage_packages', $pdo);
-$can_add_package = has_permission('can_add_package', $pdo) || has_permission('can_manage_packages', $pdo);
+// Check if user is admin
+$user_id = $_SESSION['id'];
+$admin_query = "SELECT isadmin FROM users WHERE id = :id";
+$admin_stmt = $pdo->prepare($admin_query);
+$admin_stmt->execute(['id' => $user_id]);
+$is_admin = $admin_stmt->fetchColumn();
 
-// If user doesn't have permission to add packages, redirect them
-if (!$can_add_package) {
+// Only admins can add packages
+if ($is_admin != 1) {
     $_SESSION['error_message'] = "You don't have permission to add packages.";
     header("Location: packages.php");
     exit;
@@ -27,7 +29,6 @@ $branch_id = isset($_POST['branch_id']) ? $_POST['branch_id'] :
              (isset($_GET['branch_id']) ? $_GET['branch_id'] : 1); // Default to branch 1 if not specified
 
 // Get user's assigned branches for dropdown
-$user_id = $_SESSION['id'];
 $branches_query = "SELECT b.* FROM branches b 
                   JOIN user_branches ub ON b.id = ub.branch_id 
                   WHERE ub.user_id = :user_id";
@@ -36,11 +37,6 @@ $branches_stmt->execute(['user_id' => $user_id]);
 $user_branches = $branches_stmt->fetchAll(PDO::FETCH_ASSOC);
 
 // If admin with no branches assigned, get all branches
-$isadmin_query = "SELECT isadmin FROM users WHERE id = :id";
-$isadmin_stmt = $pdo->prepare($isadmin_query);
-$isadmin_stmt->execute(['id' => $user_id]);
-$is_admin = $isadmin_stmt->fetchColumn();
-
 if ($is_admin && empty($user_branches)) {
     $branches_query = "SELECT * FROM branches";
     $branches_stmt = $pdo->prepare($branches_query);

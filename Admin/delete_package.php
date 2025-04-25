@@ -6,19 +6,21 @@ ini_set('display_errors', 1);
 // Include necessary files
 include 'layouts/session.php';
 include 'layouts/config.php';
-include 'layouts/check_permission.php';
 
 // Start session if not already started
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
-// Check permissions
-$can_manage_packages = has_permission('can_manage_packages', $pdo);
-$can_delete_package = has_permission('can_delete_package', $pdo) || has_permission('can_manage_packages', $pdo);
+// Check if user is admin
+$user_id = $_SESSION['id'];
+$admin_query = "SELECT isadmin FROM users WHERE id = :id";
+$admin_stmt = $pdo->prepare($admin_query);
+$admin_stmt->execute(['id' => $user_id]);
+$is_admin = $admin_stmt->fetchColumn();
 
-// If user doesn't have permission to delete packages, redirect them
-if (!$can_delete_package) {
+// Only admins can delete packages
+if ($is_admin != 1) {
     $_SESSION['delete_message'] = "You don't have permission to delete packages.";
     header("Location: packages.php");
     exit;
@@ -72,4 +74,4 @@ try {
 // Redirect back to packages page
 header("Location: packages.php?branch_id=$branch_id");
 exit;
-?> 
+?>
